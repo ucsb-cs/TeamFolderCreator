@@ -1,4 +1,4 @@
-# ChatGpt session
+# ChatGpt session for Google API
 
 ## Prompt
 
@@ -356,3 +356,4 @@ Let me know if you'd like to add:
 * Or logging to a file.
 
 Ready to test this out?
+

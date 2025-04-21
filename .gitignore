@@ -173,3 +173,7 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 credentials.json
+CANVAS_API_TOKEN
+token.json
+*.csv
+.vscode
