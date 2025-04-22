@@ -19,7 +19,30 @@ Then set up credentials.  You need two kinds:
 * Google OAuth Credentials, stored in `credentials.json`
 * Canvas API Token, stored in `CANVAS_API_TOKEN`
 
-Here's how to set those up:
+Instruction on setting those up appear below under "Set up Google Credentials"
+
+## Getting CSV of students/groups
+
+To get a CSV of the groups that students belong to:
+
+1. Navigate to the page where the groups are set up in Canvas, e.g. <https://ucsb.instructure.com/courses/25658/groups#tab-22633>
+2. Get the group number from the URL in Canvas, e.g. for the url above, it's `22633`
+3. Set this variable in the line of code in the script `canvas_get_group_set.py`
+
+   ```
+   GROUP_CATEGORY_ID = "22633"  # You can get this from the URL ```
+4. Run the script via: `python canvas_get_group_set.py`
+5. Your groups are now in the file `canvas_group_export.csv`
+
+To then create Google Drive folders:
+
+1. Create a top level Google Drive folder with a unique name, e.g. `CS5A-S25-ic10`.  
+2. Inside that folder, create a `data` folder if desired, that will have the data files you want students to be able to access.
+3. Also create `Initial Contents`; which are the files you want each group member to have a copy of inside the folder.
+4. Run the script `make_folders
+
+
+
 
 ## Set up Google credentials
 
