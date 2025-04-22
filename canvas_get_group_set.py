@@ -8,15 +8,13 @@ API_URL = "https://ucsb.instructure.com/api/v1"
 with open("CANVAS_API_TOKEN", "r") as token_file:
     ACCESS_TOKEN = token_file.read().strip()
 
-
-
 # Go to the People tab in Canvas and click on tab for the Group Set you want.
 # The URL will look something like this:
 # https://ucsb.instructure.com/courses/16870/groups#tab-22613
 # The number at the end is the group category ID.
 # e.g. in this case, 22613.  Put that nummber as the definitino for GROUP_CATEGORY_ID
 
-GROUP_CATEGORY_ID = "22613"  # You can get this from the URL in Canvas
+GROUP_CATEGORY_ID = "22633"  # You can get this from the URL in Canvas
 
 HEADERS = {
     "Authorization": f"Bearer {ACCESS_TOKEN}"
