@@ -37,9 +37,14 @@ To get a CSV of the groups that students belong to:
 To then create Google Drive folders:
 
 1. Create a top level Google Drive folder with a unique name, e.g. `CS5A-S25-ic10`.  
-2. Inside that folder, create a `data` folder if desired, that will have the data files you want students to be able to access.
-3. Also create `Initial Contents`; which are the files you want each group member to have a copy of inside the folder.
-4. Run the script `make_folders
+2. Create `Initial Contents` inside that folder and put the Jupyter notebook you want students to work with inside that folder.
+3. Also inside that folder, create a `data` folder if desired, that will have the data files you want students to be able to access.
+4. Set the permissions on the data file to these:
+   <img width="469" alt="image" src="https://github.com/user-attachments/assets/aa662e12-6495-43a6-8524-8b4b6fa9ce3f" />
+5. Get the URL of the data file and paste it into the Notebook.
+6. Run the script `python make_group_folders.py`
+7. The URLs will now be in `output_with_links.py`
+
 
 
 
