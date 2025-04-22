@@ -22,9 +22,16 @@ HEADERS = {
 
 def get_groups(category_id):
     url = f"{API_URL}/group_categories/{category_id}/groups"
-    response = requests.get(url, headers=HEADERS)
-    response.raise_for_status()
-    return response.json()
+    all_groups = []
+    while url:
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()
+        data = response.json()
+        all_groups.extend(data)
+        # Check for pagination
+        url = response.links.get('next', {}).get('url')
+    pprint(all_groups)  # For debugging/exploration of data
+    return all_groups
 
 def get_group_members(group_id):
     url = f"{API_URL}/groups/{group_id}/users"

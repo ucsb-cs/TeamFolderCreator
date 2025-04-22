@@ -9,7 +9,7 @@ from googleapiclient.errors import HttpError
 
 # Define the required scopes
 SCOPES = ['https://www.googleapis.com/auth/drive']
-PROJECTS_FOLDER_NAME = 'CS5A S25 ic10 test 5'
+PROJECTS_FOLDER_NAME = 'CS5A S25 ic10'
 INITIAL_PROJECTS_FOLDER_NAME = 'Initial Contents'
 
 
