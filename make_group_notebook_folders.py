@@ -1,4 +1,4 @@
-import pandas as pd
+
 import os
 import json
 import csv
@@ -13,9 +13,8 @@ from pprint import pprint
 
 # Define the required scopes
 SCOPES = ['https://www.googleapis.com/auth/drive']
-PROJECTS_FOLDER_NAME = 'CS5A S25 ic10 - test 7 PLEASE IGNORE'
+PROJECTS_FOLDER_NAME = 'CS5A S25 ic12 test 4 PLEASE IGNORE'
 INITIAL_PROJECTS_FOLDER_NAME = 'Initial Contents'
-
 
 # Authenticate and build the Drive API service
 def authenticate():
@@ -72,39 +71,6 @@ def share_folder(service, file_id, email):
         sendNotificationEmail=False
     ).execute()
 
-def make_folders():
-    service = authenticate()
-
-    df = pd.read_csv('canvas_group_export.csv')  # CSV with columns: email, group
-    df['folder_link'] = ''
-
-    # Step 1: Create the parent Projects folder
-    parent_folder_id = create_folder_1(service, PROJECTS_FOLDER_NAME)
-
-    # Step 2: Create group folders and assign permissions
-    group_folders = {}
-
-    for index, row in df.iterrows():
-        email, group = row['Email'], row['Group Name']
-        # Add group to the dictionary if not already present
-        # and create the groups folder if that hasn't already been done.
-        if group not in group_folders:
-            group_id = create_folder_1(service, group, parent_folder_id)
-            group_folders[group] = group_id
-        else:
-            group_id = group_folders[group]
-        
-        # Give this user write access to the group folder
-        share_folder(service, group_id, email)
-
-        folder_link = f"https://drive.google.com/drive/folders/{group_id}"
-        df.at[index, 'folder_link'] = folder_link
-
-    # Step 3: Export updated CSV
-    df.to_csv('output_with_links.csv', index=False)
-    print("Done. Output saved to 'output_with_links.csv'.")
-
-
 def create_member_file(service, group_id, group_name, members):
     # Create a CSV file with group members
     output_file = f"{group_name}_members.csv"
@@ -123,8 +89,19 @@ def create_member_file(service, group_id, group_name, members):
     file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
     print(f"Created member file: {output_file} in group folder: {group_name}")
 
-def create_member_file_google_sheet(service, group_id, group_name, members):
-    # Create a Google Sheet with group members
+def create_or_update_member_file_google_sheet(service, group_id, group_name, members):
+    # Check if a Google Sheet with the target name already exists
+    query = f"name='{group_name}_members' and mimeType='application/vnd.google-apps.spreadsheet' and '{group_id}' in parents"
+    results = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+    sheets = results.get('files', [])
+
+    if sheets:
+        create_new_tab_member_file_google_sheet(service, group_id, group_name, members, sheets)
+    else:
+        create_new_member_file_google_sheet(service, group_id, group_name, members)
+                
+def create_new_member_file_google_sheet(service, group_id, group_name, members):
+    # If the spreadsheet does not exist, create a new one
     sheet_metadata = {
         'name': f"{group_name}_members",
         'mimeType': 'application/vnd.google-apps.spreadsheet',
@@ -151,12 +128,82 @@ def create_member_file_google_sheet(service, group_id, group_name, members):
         body=body
     ).execute()
     
-    print(f"Created member file: {group_name}_members in group folder: {group_name}")
+    print(f"Created new spreadsheet: {group_name}_members in group folder: {group_name}")
 
-def make_group_folders(service, group_dict):
+def create_new_tab_member_file_google_sheet(service, group_id, group_name, members, sheets):
+    # If the spreadsheet exists, add a new tab with the member data
+    sheet_id = sheets[0]['id']
+    sheets_service = build('sheets', 'v4', credentials=service._http.credentials)
+    
+    new_tab_name = "Members"
 
-    # df = pd.read_csv('canvas_group_export.csv')  # CSV with columns: email, group
-    # df['folder_link'] = ''
+    # Determine number of existing tabs
+    existing_tabs = sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    existing_tabs = existing_tabs.get('sheets', [])
+    existing_tab_names = [tab['properties']['title'] for tab in existing_tabs]
+    
+    # Ensure the new tab name is unique
+    version = 1;
+    new_tab_name = f"Members_{version}"
+    while new_tab_name in existing_tab_names:
+        version += 1
+        new_tab_name = f"Members_{version}"
+    
+    # Create a new tab with a unique name
+    add_sheet_body = {
+        "requests": [
+            {
+                "addSheet": {
+                    "properties": {
+                        "title": new_tab_name
+                    }
+                }
+            }
+        ]
+    }
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=sheet_id,
+        body=add_sheet_body
+    ).execute()
+    
+    # Prepare data for the new tab
+    values = [['Name', 'Email']]
+    for member in members:
+        values.append([member['Name'], member['Email']])
+    
+    # Update the new tab with the member data
+    body = {
+        'values': values
+    }
+    range_name = f"'{new_tab_name}'!A1"
+    sheets_service.spreadsheets().values().update(
+        spreadsheetId=sheet_id,
+        range=range_name,
+        valueInputOption='RAW',
+        body=body
+    ).execute()
+    
+    print(f"Updated existing spreadsheet: {group_name}_members with new tab: {new_tab_name}")
+
+
+def copy_notebook_file(service, notebook_file_id, new_name, group_id, group_name):
+    try:
+        copy_file(service, notebook_file_id, new_name, group_id)   
+        print(f"  Copied {notebook_file_name} to {group_name} as {new_name}")    
+    except HttpError as e:
+        print(f"  Failed to copy into {group_name}: {e}")  
+        
+def copy_initial_notebook_file_to_group(service, group_id, group_name, members, notebook_file_id, notebook_file_name):
+  print(f"\nCopying notebook file into {group_name}...")
+
+  final_notebook_file_name = notebook_file_name.replace('.ipynb', f'_FINAL.ipynb')
+  copy_notebook_file(service, notebook_file_id, final_notebook_file_name, group_id, group_name)
+  for member in members:
+    name_with_underscores = member['Name'].replace(' ', '_')
+    new_name = notebook_file_name.replace('.ipynb', f'_{name_with_underscores}.ipynb')
+    copy_notebook_file(service, notebook_file_id, new_name, group_id, group_name)
+ 
+def make_group_folders(service, group_dict, notebook_file_id, notebook_file_name):
 
     # Step 1: Create the parent Projects folder
     parent_folder_id = create_folder_1(service, PROJECTS_FOLDER_NAME)
@@ -175,7 +222,9 @@ def make_group_folders(service, group_dict):
             email = student['Email']
             share_folder(service, group_id, email)
             
-        create_member_file_google_sheet(service, group_id, group, value['members'])
+        create_or_update_member_file_google_sheet(service, group_id, group, value['members'])
+        copy_initial_notebook_file_to_group(service, group_id, group, value['members'], notebook_file_id, notebook_file_name)
+        
 
     # Output the group dictionary to a CSV file
     output_file = 'group_folders.csv'
@@ -275,18 +324,112 @@ def copy_initial_contents_to_groups():
             print(f"  Failed to copy into {group_name}: {e}")
 
     print("\n✅ All files and folders copied to group folders.")
+ 
+ 
+def get_notebook_file_id_and_name(service):
+  # Step 1: Find the Projects folder
+    projects_id = find_folder_id(service, PROJECTS_FOLDER_NAME)
+    if not projects_id:
+        raise Exception("Projects folder not found.")
+
+    # Step 2: Find the 'Initial Contents' folder inside Projects
+    initial_id = find_folder_id(service, 'Initial Contents', parent_id=projects_id)
+    if not initial_id:
+        raise Exception(f"'Initial Contents' folder not found inside {PROJECTS_FOLDER_NAME}.")
+
+    # Step 3: Get the list of all files inside the 'Initial Contents' folder
+    files = list_files_in_folder(service, initial_id)
+    if not files:
+        raise Exception(f"No files found inside 'Initial Contents' folder.")
+    
+    # Step 4: Find the name of the first file inside the 'Initial Contents' folder
+    # and check if it is a notebook file
+    # If it is not a notebook file, raise an exception
+    # If it is a notebook file, get its ID
+    notebook_file_name = None
+    notebook_file_id = None
+    for file in files:
+        # If the filename ends in .ipynb, it is a notebook file
+        if file['name'].endswith('.ipynb'):
+            notebook_file_name = file['name']
+            notebook_file_id = file['id']
+            print(f"Found notebook file: {notebook_file_name} in Initial Contents folder.")
+            break
+        
+    if not notebook_file_name:
+        raise Exception(f"No notebook file (.ipynb) found inside 'Initial Contents' folder.")
+    
+    return (notebook_file_id, notebook_file_name)
 
 
-def summarize_group_data():
-    df = pd.read_csv('canvas_group_export.csv')
-    print(df)
-    # group_counts = df['Group Name'].value_counts()
-    # print("\nGroup Summary:")
-    # for group, count in group_counts.items():
-    #     print(f"{group}: {count} members")
-    # print("\n✅ Group summary complete.")
+def copy_notebook_file_to_groups(service, group_dict):
+
+    # Step 1: Find the Projects folder
+    projects_id = find_folder_id(service, PROJECTS_FOLDER_NAME)
+    if not projects_id:
+        raise Exception("Projects folder not found.")
+
+    # Step 2: Find the 'Initial Contents' folder inside Projects
+    initial_id = find_folder_id(service, 'Initial Contents', parent_id=projects_id)
+    if not initial_id:
+        raise Exception(f"'Initial Contents' folder not found inside {PROJECTS_FOLDER_NAME}.")
+
+    # Step 3: Get the list of all files inside the 'Initial Contents' folder
+    files = list_files_in_folder(service, initial_id)
+    if not files:
+        raise Exception(f"No files found inside 'Initial Contents' folder.")
     
+    # Step 4: Find the name of the first file inside the 'Initial Contents' folder
+    # and check if it is a notebook file
+    # If it is not a notebook file, raise an exception
+    # If it is a notebook file, get its ID
+    notebook_file_name = None
+    notebook_file_id = None
+    for file in files:
+        # If the filename ends in .ipynb, it is a notebook file
+        if file['name'].endswith('.ipynb'):
+            notebook_file_name = file['name']
+            notebook_file_id - file['id']
+            print(f"Found notebook file: {notebook_file_name} in Initial Contents folder.")
+            break
+        
+    if not notebook_file_name:
+        raise Exception(f"No notebook file (.ipynb) found inside 'Initial Contents' folder.")
     
+    # Step 3: Find the notebook file in the 'Initial Contents' folder
+    notebook_file_id = find_folder_id(service, notebook_file_name, parent_id=initial_id)
+    if not notebook_file_id:
+        raise Exception(f"Notebook file '{notebook_file_name}' not found inside 'Initial Contents' folder.")
+    # Step 4: Get list of all group folders (excluding 'Initial Contents', 'data)
+    folders = service.files().list(
+        q=f"'{projects_id}' in parents and mimeType='application/vnd.google-apps.folder' and name != 'Initial Contents' and name != 'data'",
+        fields='files(id, name)'
+    ).execute().get('files', [])
+    
+    # Step 5: Iterate over the group members in the group.
+    # For each group member, copy the notebook file into their group folder
+    #  renaming it by replacing `.ipynb` with `_{loginId}.ipynb`
+
+    for folder in folders:
+        if folder['name'] == 'Initial Contents':
+            continue
+        if folder['name'] == 'data':
+            continue
+        group_name = folder['name']
+        group_id = folder['id']
+        print(f"\nCopying notebook file into {group_name}...")
+        for member in group_dict[group_name]['members']:
+            # Get the loginId of the group member
+            loginId = member['loginId']
+            new_name = notebook_file_name.replace('.ipynb', f'_{loginId}.ipynb')
+            try:
+                copy_file(service, notebook_file_id, new_name, group_id)   
+                print(f"  Copied {notebook_file_name} to {group_name} as {new_name}")    
+            except HttpError as e:
+                print(f"  Failed to copy into {group_name}: {e}")    
+
+    print("\n✅ All files and folders copied to group folders.")
+ 
 
 def csv_to_dict(filename):
     data_dict = {}
@@ -311,6 +454,9 @@ if __name__ == '__main__':
     service = authenticate()
     group_data = csv_to_dict('canvas_group_export.csv')
     group_dict = make_group_dictionary(group_data)
-    make_group_folders(service, group_dict)
+    parent_folder_id = create_folder_1(service, PROJECTS_FOLDER_NAME)
+    (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(service)
+    make_group_folders(service, group_dict, notebook_file_id, notebook_file_name)
+    # copy_notebook_file_to_groups(service, group_dict)
     
     
