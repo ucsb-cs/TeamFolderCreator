@@ -7,11 +7,13 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
+
 from pprint import pprint
 
 # Define the required scopes
 SCOPES = ['https://www.googleapis.com/auth/drive']
-PROJECTS_FOLDER_NAME = 'CS5A S25 ic10 - test 6 PLEASE IGNORE'
+PROJECTS_FOLDER_NAME = 'CS5A S25 ic10 - test 7 PLEASE IGNORE'
 INITIAL_PROJECTS_FOLDER_NAME = 'Initial Contents'
 
 
@@ -103,6 +105,54 @@ def make_folders():
     print("Done. Output saved to 'output_with_links.csv'.")
 
 
+def create_member_file(service, group_id, group_name, members):
+    # Create a CSV file with group members
+    output_file = f"{group_name}_members.csv"
+    with open(output_file, 'w', newline='') as csvfile:
+        fieldnames = ['Name', 'Email']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for member in members:
+            writer.writerow({'Name': member['Name'], 'Email': member['Email']})
+    # Upload the CSV file to the group folder
+    file_metadata = {
+        'name': output_file,
+        'parents': [group_id]
+    }
+    media = MediaFileUpload(output_file, mimetype='text/csv')
+    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    print(f"Created member file: {output_file} in group folder: {group_name}")
+
+def create_member_file_google_sheet(service, group_id, group_name, members):
+    # Create a Google Sheet with group members
+    sheet_metadata = {
+        'name': f"{group_name}_members",
+        'mimeType': 'application/vnd.google-apps.spreadsheet',
+        'parents': [group_id]
+    }
+    sheet = service.files().create(body=sheet_metadata, fields='id').execute()
+    sheet_id = sheet['id']
+    
+    # Prepare data for the Google Sheet
+    values = [['Name', 'Email']]
+    for member in members:
+        values.append([member['Name'], member['Email']])
+    
+    # Update the Google Sheet with the member data
+    body = {
+        'values': values
+    }
+    range_name = 'Sheet1!A1'
+    sheets_service = build('sheets', 'v4', credentials=service._http.credentials)
+    sheets_service.spreadsheets().values().update(
+        spreadsheetId=sheet_id,
+        range=range_name,
+        valueInputOption='RAW',
+        body=body
+    ).execute()
+    
+    print(f"Created member file: {group_name}_members in group folder: {group_name}")
+
 def make_group_folders(service, group_dict):
 
     # df = pd.read_csv('canvas_group_export.csv')  # CSV with columns: email, group
@@ -124,6 +174,8 @@ def make_group_folders(service, group_dict):
         for student in value['members']:
             email = student['Email']
             share_folder(service, group_id, email)
+            
+        create_member_file_google_sheet(service, group_id, group, value['members'])
 
     # Output the group dictionary to a CSV file
     output_file = 'group_folders.csv'
