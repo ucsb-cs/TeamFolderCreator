@@ -13,7 +13,7 @@ from pprint import pprint
 
 # Define the required scopes
 SCOPES = ['https://www.googleapis.com/auth/drive']
-PROJECTS_FOLDER_NAME = 'CS5A S25 ic12 test 4 PLEASE IGNORE'
+PROJECTS_FOLDER_NAME = 'cs5a-s25-ic12'
 INITIAL_PROJECTS_FOLDER_NAME = 'Initial Contents'
 
 # Authenticate and build the Drive API service
@@ -187,6 +187,12 @@ def create_new_tab_member_file_google_sheet(service, group_id, group_name, membe
 
 
 def copy_notebook_file(service, notebook_file_id, new_name, group_id, group_name):
+    # Check if a file with the target name already exists in the group folder
+    existing_files = list_files_in_folder(service, group_id)
+    file_exists = any(file['name'] == new_name for file in existing_files)
+    if file_exists:
+        print(f"  File {new_name} already exists in {group_name}. Skipping copy.")
+        return
     try:
         copy_file(service, notebook_file_id, new_name, group_id)   
         print(f"  Copied {notebook_file_name} to {group_name} as {new_name}")    
@@ -203,7 +209,7 @@ def copy_initial_notebook_file_to_group(service, group_id, group_name, members, 
     new_name = notebook_file_name.replace('.ipynb', f'_{name_with_underscores}.ipynb')
     copy_notebook_file(service, notebook_file_id, new_name, group_id, group_name)
  
-def make_group_folders(service, group_dict, notebook_file_id, notebook_file_name):
+def make_group_folders(service, group_dict, notebook_file_id, notebook_file_name, filter=None):
 
     # Step 1: Create the parent Projects folder
     parent_folder_id = create_folder_1(service, PROJECTS_FOLDER_NAME)
@@ -211,9 +217,15 @@ def make_group_folders(service, group_dict, notebook_file_id, notebook_file_name
     # Step 2: Create group folders and assign permissions
     group_folders = {}
 
-
+    print(f"Filter: {filter}")
     for group, value in group_dict.items():
-        print(f"\nCreating folder for group: {group}...")
+
+        if filter and group not in filter:
+            print(f"Skipping group {group} as it is not in the filter list.")
+            continue
+        
+        print(f"Creating folder for group: {group}...")
+
         group_id = create_folder_1(service, group, parent_folder_id)
         group_dict[group]['folder_url'] = f"https://drive.google.com/drive/folders/{group_id}"
 
@@ -354,7 +366,7 @@ def get_notebook_file_id_and_name(service):
             notebook_file_name = file['name']
             notebook_file_id = file['id']
             print(f"Found notebook file: {notebook_file_name} in Initial Contents folder.")
-            break
+            
         
     if not notebook_file_name:
         raise Exception(f"No notebook file (.ipynb) found inside 'Initial Contents' folder.")
@@ -422,6 +434,14 @@ def copy_notebook_file_to_groups(service, group_dict):
             # Get the loginId of the group member
             loginId = member['loginId']
             new_name = notebook_file_name.replace('.ipynb', f'_{loginId}.ipynb')
+
+            # Determine whether the file already exists in the group folder
+            existing_files = list_files_in_folder(service, group_id)
+            file_exists = any(file['name'] == new_name for file in existing_files)
+            if file_exists:
+                print(f"  File {new_name} already exists in {group_name}. Skipping copy.")
+                continue
+
             try:
                 copy_file(service, notebook_file_id, new_name, group_id)   
                 print(f"  Copied {notebook_file_name} to {group_name} as {new_name}")    
@@ -456,7 +476,7 @@ if __name__ == '__main__':
     group_dict = make_group_dictionary(group_data)
     parent_folder_id = create_folder_1(service, PROJECTS_FOLDER_NAME)
     (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(service)
-    make_group_folders(service, group_dict, notebook_file_id, notebook_file_name)
+    make_group_folders(service, group_dict, notebook_file_id, notebook_file_name, filter=["Week-4-Lecture-Group 31"])
     # copy_notebook_file_to_groups(service, group_dict)
     
     
