@@ -476,7 +476,7 @@ if __name__ == '__main__':
     group_dict = make_group_dictionary(group_data)
     parent_folder_id = create_folder_1(service, PROJECTS_FOLDER_NAME)
     (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(service)
-    make_group_folders(service, group_dict, notebook_file_id, notebook_file_name, filter=["Week-4-Lecture-Group 31"])
+    make_group_folders(service, group_dict, notebook_file_id, notebook_file_name, filter=["Week-4-Lecture-Group 29"])
     # copy_notebook_file_to_groups(service, group_dict)
     
     
