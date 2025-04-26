@@ -352,7 +352,240 @@ def make_roster_csv(COURSE_ID=COURSE_ID):
     roster = make_roster_main(COURSE_ID)
     export_roster_to_csv(roster)
 
+
+
+def locate_assignment_by_id(assignment_id):
+    url = f"{API_URL}/courses/{COURSE_ID}/assignments/{assignment_id}"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    return response.json()
+
+
+def locate_assignment(assignment_name):
+    url = f"{API_URL}/courses/{COURSE_ID}/assignments"
+    assignments = []
+    while url:
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()
+        data = response.json()
+        assignments.extend(data)
+        # Check for pagination
+        url = response.links.get("next", {}).get("url")
+    for assignment in assignments:
+        if assignment["name"] == assignment_name:
+            return assignment
+    return None
+
+def get_assignment_submissions(assignment_id):
+    url = f"{API_URL}/courses/{COURSE_ID}/assignments/{assignment_id}/submissions"
+    all_submissions = []
+    while url:
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()
+        data = response.json()
+        all_submissions.extend(data)
+        # Check for pagination
+        url = response.links.get("next", {}).get("url")
+    return all_submissions
+
+def get_assignment_submissions_for_student(assignment_id, student_id):
+    url = f"{API_URL}/courses/{COURSE_ID}/assignments/{assignment_id}/submissions/{student_id}"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    return response.json()
+
+def add_feedback_to_submission(assignment_id, student_id, comment):
+    url = f"{API_URL}/courses/{COURSE_ID}/assignments/{assignment_id}/submissions/{student_id}"
+    data = {
+        "comment": {
+            "text_comment": comment
+        }
+    }
+    response = requests.put(url, headers=HEADERS, json=data)
+    response.raise_for_status()
+    return response.json()
+
+def add_feedback_to_submission_unless_duplicate(assignment_id, student_id, comment):
+    assignment = locate_assignment_by_id(assignment_id)
+    if not assignment:
+        print(f"Assignment with id '{assignment_id}' not found.")
+        return
+    
+    print(f"Adding feedback for assignment name: {assignment['name']}")
+
+    assignment_id = assignment["id"]
+    comments = get_submission_comments_graphql(COURSE_ID, student_id, assignment_id)
+    # Check if the comment already exists
+        
+    for existing_comment in comments:
+        existing_html = existing_comment["htmlComment"]
+        if existing_html.strip() == comment.strip():
+            print(f"Comment already exists for student {student_id}.")
+            return
+ 
+    print(f"Adding comment to submission for student {student_id}...")
+    # Add the new comment
+    add_feedback_to_submission(assignment_id, student_id, comment)
+
+
+def get_submission_comments(assignment_id, student_id):
+    url = f"{API_URL}/courses/{COURSE_ID}/assignments/{assignment_id}/submissions/{student_id}"
+    params = {
+        "include[]": "submission_comments"
+    }
+    response = requests.get(url, headers=HEADERS, params=params)
+    response.raise_for_status()
+    submission = response.json()
+    
+    comments = []
+    if 'submission_comments' in submission:
+        for comment in submission['submission_comments']:
+            comments.append(comment['comment'])  # or comment['text_comment'] depending on API version
+
+    return comments
+
+
+
+def get_submission_comments_graphql(course_id, user_id, asssignment_id):
+    url = f"{API_URL.replace("v1","")}/graphql"
+
+    query = """
+    query GetAssignmentHTMLComments($userId: ID!, $courseId: ID!) {
+        course(id: $courseId) {
+            id
+            name
+            assignmentsConnection(filter: {userId: $userId}) {
+            edges {
+                node {
+                id
+                _id
+                name
+                submissionsConnection(filter: { userId: $userId}) {
+                    edges {
+                    node {
+                        id
+                        commentsConnection {
+                        edges {
+                            node {
+                                htmlComment
+                                createdAt
+                                author {
+                                    name
+                                    email
+                                }
+                            }
+                        }
+                        }
+                    }
+                    }
+                }
+                }
+            }
+            }
+        }
+    }
+    """
+    
+    
+    variables = {
+        "userId": str(user_id),
+        "courseId": str(course_id)
+    }
+
+    headers = {
+        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "query": query,
+        "variables": variables
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+    data = response.json()
+    
+    if 'errors' in data:
+        print("GraphQL errors:", data['errors'])
+        return []
+    if 'data' not in data:
+        print("No data found in response.")
+        return []
+
+    assignments = data['data']['course']['assignmentsConnection']['edges']    
+    filtered_assignments = [
+        assignment for assignment in assignments if assignment['node']['_id'] == str(asssignment_id)
+    ]
+    
+    htmlComments = []
+    for assignment in filtered_assignments:
+        submissions = assignment['node']['submissionsConnection']['edges']
+        for submission in submissions:
+            comments = submission['node']['commentsConnection']['edges']
+            for comment in comments:
+                # if type(comment['node']['htmlComment']) == tuple:
+                #     commentText = comment['node']['htmlComment'].join("")
+                # else:
+                commentText = comment['node']['htmlComment']
+                    
+                thisComment = { 
+                   "htmlComment" : commentText,
+                   "authorName" : comment['node']['author']['name'],
+                   "authorEmail" : comment['node']['author']['email'],
+                   "createdAt" : comment['node']['createdAt'],
+                }
+                htmlComments.append(thisComment) 
+    
+    
+    pprint(htmlComments)
+    return htmlComments
+
+    # comments = []
+    # try:
+    #     enrollments = data["data"]["user"]["enrollments"]["nodes"]
+    #     for enrollment in enrollments:
+    #         course = enrollment.get("course")
+    #         if course and course["id"] == str(course_id):
+    #             submissions = course["submissionsConnection"]["nodes"]
+    #             for submission in submissions:
+    #                 assignment = submission["assignment"]
+    #                 if assignment:
+    #                     submission_id = assignment.get("id")
+    #                     if submission_id:
+    #                         comment_nodes = submission["submissionCommentsConnection"]["nodes"]
+    #                         for comment in comment_nodes:
+    #                             comments.append({
+    #                                 "assignment_id": assignment["id"],
+    #                                 "assignment_name": assignment["name"],
+    #                                 "comment_id": comment["id"],
+    #                                 "author_name": comment["author"]["displayName"],
+    #                                 "comment_text": comment["comment"],
+    #                                 "created_at": comment["createdAt"]
+    #                             })
+    # except (KeyError, TypeError) as e:
+    #     print("Error parsing response:", e)
+
+    # return comments
+
+
+
 if __name__ == "__main__":
+    pass
+
+    MIDTERM_GROUP_SET_ID = "22640"  # You can get this from the URL in Canvas (for midterm groups)
+    WEEK4_GROUP_SET_ID = "22633"  # You can get this from the URL in Canvas (for week4 groups)
+
+    
+    (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ('cs5a-s25-ic12', WEEK4_GROUP_SET_ID)
+    # (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ('cs5a-s25-midterm', MIDTERM_GROUP_SET_ID)
+
+
+    # roster = make_roster_main(COURSE_ID)
+    groups = get_groups(GROUP_CATEGORY_ID)
+    # add_roster_fields_to_all_groups(groups, roster)
+    
     make_roster_csv(COURSE_ID)
+
 
     
