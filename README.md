@@ -12,7 +12,7 @@ Scripts to:
 ```
 python3 -m venv venv
 source ./venv/bin/activate
-pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib pandas requests
+pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib pandas requests google-auth  
 ```
 
 Then set up credentials.  You need two kinds:

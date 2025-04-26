@@ -177,3 +177,4 @@ CANVAS_API_TOKEN
 token.json
 *.csv
 .vscode
+*.pkl
