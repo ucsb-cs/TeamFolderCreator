@@ -286,7 +286,7 @@ def copy_initial_notebook_file_to_group(
         copy_notebook_file(service, notebook_file_id, new_name, group_drive_folder_id, group_name)
 
 
-def make_group_folders(
+def make_group_folders_with_single_notebook(
     service,
     group_dict,
     notebook_file_id,
@@ -355,6 +355,68 @@ def make_group_folders(
             )
 
     print(f"Done. Output saved to {output_file}.")
+
+
+def make_group_folders(
+    service,
+    group_dict,
+    PROJECTS_FOLDER_NAME,
+    filter=None,
+    GROUP_CATEGORY_ID=None,
+):
+
+    # Step 1: Create the parent Projects folder
+    parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
+
+    # Step 2: Create group folders and assign permissions
+    group_folders = {}
+
+    print(f"Filter: {filter}")
+    groups = list(group_dict.keys())
+    groups.sort(key=folder_name_sort_key)
+    for group in groups:
+        value = group_dict[group]
+
+        if group == "":
+            print(f"Skipping group {group} as it has no name.")
+            names = [member["student_name"] for member in value["members"]]
+            print(f"This group has the following members: {names}")
+            continue
+
+        if filter and group not in filter:
+            print(f"Skipping group {group} as it is not in the filter list.")
+            continue
+
+        print(f"Creating folder for group: {group}...")
+
+        group_drive_folder_id = create_folder(service, group, parent_folder_id)
+        group_dict[group][
+            "folder_url"
+        ] = f"https://drive.google.com/drive/folders/{group_drive_folder_id}"
+        group_dict[group]["group_drive_folder_id"] = group_drive_folder_id
+
+        # Give this user write access to the group folder
+        for student in value["members"]:
+            email = student["email"]
+            share_folder(service, group_drive_folder_id, email)
+
+        create_or_update_member_file_google_sheet(
+            service, group_drive_folder_id, group, value["members"]
+        )
+
+    # Output the group dictionary to a CSV file
+    output_file = f"group_folders_{GROUP_CATEGORY_ID}.csv"
+    with open(output_file, "w", newline="") as csvfile:
+        fieldnames = ["Group Name", "Folder URL"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for group_name, group_info in group_dict.items():
+            writer.writerow(
+                {"Group Name": group_name, "Folder URL": group_info["folder_url"]}
+            )
+
+    print(f"Done. Output saved to {output_file}.")
+
 
 
 def populate_group_dict_with_folder_urls(
@@ -1149,8 +1211,8 @@ if __name__ == "__main__":
         "22633"  # You can get this from the URL in Canvas (for week4 groups)
     )
 
-    (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ("cs5a-s25-ic12", WEEK4_GROUP_SET_ID)
-    # (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ('cs5a-s25-midterm', MIDTERM_GROUP_SET_ID)
+    # (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ("cs5a-s25-ic12", WEEK4_GROUP_SET_ID)
+    (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ('cs5a-s25-midterm', MIDTERM_GROUP_SET_ID)
 
 
     # filter = [
@@ -1180,6 +1242,13 @@ if __name__ == "__main__":
     #      service, PROJECTS_FOLDER_NAME
     #  )
     # make_group_folders(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=filter, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
+    parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
+    (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(
+         service, PROJECTS_FOLDER_NAME
+     )
+    
+    #make_group_folders_with_single_notebook(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
+    make_group_folders(service, group_dict, PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
 
     # scan_group_folders(service, drive_activity_service, PROJECTS_FOLDER_NAME, group_dict)
 
