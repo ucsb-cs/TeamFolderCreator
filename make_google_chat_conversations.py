@@ -16,7 +16,7 @@
 # The script is intended for educational purposes and should be used responsibly.
 
 
-SLEEP = 1.0  # seconds
+SLEEP = 0.5  # seconds
 
 import csv
 import json
@@ -48,6 +48,9 @@ ACTIVITY_NAME = "CS5A S25 Wk4"
 
 def function_name():
     return inspect.stack()[1].function
+
+def called_by():
+    return inspect.stack()[2].function
 
 def group_name_filter(group_name):
     if "Week-4-Lecture-Group " in group_name:
@@ -212,14 +215,25 @@ def create_new_space(session, space_display_name):
 
 
 def get_person(session, user_id):
+    # print(f"{function_name()}, called by {called_by()} Getting person {user_id}")
     people_url = f"https://people.googleapis.com/v1/people/{user_id}?personFields=emailAddresses,names"
     resp = session.get(people_url)
     time.sleep(SLEEP)  # Respect rate limits
     if resp.status_code != 200:
         print(f"⚠️ Failed to get person {user_id}: {resp.text}")
+        sys.exit(1)
         return None
     person = resp.json()
     return person
+
+
+def person_to_name(person):
+    if not person:
+        return None
+    names = person.get("names", [])
+    pprint(names)
+    sys.exit(0)
+    return None
 
 
 def person_to_ucsb_email(person):
@@ -238,6 +252,13 @@ def person_id_to_ucsb_email(session, person_id):
     if not person:
         return None
     return person_to_ucsb_email(person)
+
+def person_id_to_name(session, person_id):
+    person = get_person(session, person_id)
+    if not person:
+        return None
+    return person_to_name(person)
+
 
 
 def get_existing_members_emails(session, space):
@@ -520,7 +541,15 @@ def get_space_from_space_name(session, space_name):
 
 def read_chat_messages(session, group_folders):
     result = []
-    for group_name, data in group_folders.items():
+    
+    group_names = list(group_folders.keys())
+    group_names.sort(key=folder_name_sort_key)
+    
+    for group_name in group_names:
+        if group_name == "":
+            continue
+        data = group_folders[group_name]
+        pprint(data)
         space_name = data["space_name"]
 
         space = get_space_from_space_name(session, space_name)
@@ -528,7 +557,11 @@ def read_chat_messages(session, group_folders):
         messages = get_recent_messages(session, space)
         if messages:
             for message in messages:
-                person = get_person(session, message["sender"])
+                user_id = message["sender"]["name"].split("/")[-1]
+                person = get_person(session, user_id)
+                if not person:
+                    print(f"⚠️ Failed to get person {user_id}: {person}")
+                    sys.exit(1)
                 result.append(
                     {
                         "group_name": group_name,
@@ -537,7 +570,7 @@ def read_chat_messages(session, group_folders):
                         "email": person_to_ucsb_email(person),
                     }
                 )
-        return result
+        return result # REMOVE THIS AFTER DEBUGGING
         time.sleep(SLEEP)  # Respect rate limits
     return result
 
@@ -546,9 +579,23 @@ def print_chat_message_data(chat_message_data):
     for data in chat_message_data:
         if data["email"] == "phtcon@ucsb.edu":
             continue
+        sender = None
+        displayName = None
+        email = None
+        text = None
+        if "sender" in data:
+            sender = data["sender"]
+        if sender and "names" in sender and len(sender["names"]) > 0:
+            displayName = sender["names"][0].get("displayName")
+        if "email" in data:
+            email = data["email"]
+        if "message" in data and "text" in data["message"]:
+            text = data["message"]["text"]
+  
         print(
-            f"group: {data['group_name']} Sender: {data['sender']['names'][0]['displayName']} email: {data['email']} text: {data['message']['text'][0:30]}"
+            f"group: {data['group_name']} Sender: {displayName} email: {data['email']} text: {repr(text[0:30])}"
         )
+
 
 
 def write_group_folders_with_chat_groups(group_folders, GROUP_CATEGORY_ID):
@@ -684,7 +731,7 @@ if __name__ == "__main__":
 
     session = get_session()
     group_folders = get_group_folders(GROUP_CATEGORY_ID)
-    print(f"Group folders: {group_folders}")
+    print(f"Function: {function_name()} Group folders: {group_folders}")
     create_group_chats(
         session, group_folders, STUDENT_CSV=STUDENT_CSV, ACTIVITY_NAME=ACTIVITY_NAME
     )
