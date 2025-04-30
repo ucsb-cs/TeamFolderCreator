@@ -447,7 +447,7 @@ def get_submission_comments(assignment_id, student_id):
 
 
 def get_submission_comments_graphql(course_id, user_id, asssignment_id):
-    url = f"{API_URL.replace("v1","")}/graphql"
+    url = f"""{API_URL.replace("v1","")}/graphql"""
 
     query = """
     query GetAssignmentHTMLComments($userId: ID!, $courseId: ID!) {

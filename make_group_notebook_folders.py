@@ -252,7 +252,7 @@ def copy_notebook_file(
         if new_name in ["CS5A-S25-ic12_FINAL_0.ipynb", "CS5A-S25-ic12_Ali_Aouda_0.ipynb"]:
             print("Skipping file copy...")
             return;
-        if new_name not in ["CS5A-S25-ic12_Julian_Jeong_0.ipynb","CS5A-S25-ic12_Tianyue_Hao_0.ipynb"]:
+        if new_name not in ["CS5A-S25-ic12_Julian_Jeong_0.ipynb","CS5A-S25-ic12_Tianyue_Hao_0.ipynb","CS5A-S25-ic12_Jaden_Latimore_0.ipynb"]:
             sys.exit(0);
         copy_file(service, notebook_file_id, new_name, group_drive_folder_id)
         print(f"  Copied {notebook_file_name} to {group_name} as {new_name}")
@@ -775,6 +775,7 @@ def add_google_drive_folder_links(
     service,
     drive_activity_service,
     PROJECTS_FOLDER_NAME,
+    addFeedback=False
 ):
 
     # Step 0: locate the canvas assignment
@@ -808,12 +809,13 @@ def add_google_drive_folder_links(
             <p><a href="{url}">{url}></p>
             """
 
-            canvas_roster_functions.add_feedback_to_submission_unless_duplicate(
-                assignment_id, student_id, text
-            )
-            print(
-                f"Added feedback for {student['student_name']} in group {group_name} with ID {student_id}."
-            )
+            if addFeedback:
+                canvas_roster_functions.add_feedback_to_submission_unless_duplicate(
+                    assignment_id, student_id, text
+                )
+                print(
+                    f"Added feedback for {student['student_name']} in group {group_name} with ID {student_id}."
+                )
 
 
 def add_editors_to_list_of_files(service, drive_activity_service, files):
@@ -1150,6 +1152,14 @@ if __name__ == "__main__":
     (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ("cs5a-s25-ic12", WEEK4_GROUP_SET_ID)
     # (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ('cs5a-s25-midterm', MIDTERM_GROUP_SET_ID)
 
+
+    # filter = [
+    #     "Week-4-Lecture-Group 23",
+    #     "Week-4-Lecture-Group 25",
+    #     "Week-4-Lecture-Group-33"]
+
+    filter=None
+
     service = authenticate()
     drive_activity_service = authorize_drive_activity_api()
 
@@ -1161,42 +1171,42 @@ if __name__ == "__main__":
         service,
         group_dict,
         PROJECTS_FOLDER_NAME,
-        filter=None,
+        filter=filter,
         GROUP_CATEGORY_ID=GROUP_CATEGORY_ID,
     )
 
-    parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
-    (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(
-         service, PROJECTS_FOLDER_NAME
-     )
-    make_group_folders(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
+    # parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
+    # (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(
+    #      service, PROJECTS_FOLDER_NAME
+    #  )
+    # make_group_folders(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=filter, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
 
     # scan_group_folders(service, drive_activity_service, PROJECTS_FOLDER_NAME, group_dict)
 
-    # add_google_drive_folder_links("ic12", group_dict, service, drive_activity_service, PROJECTS_FOLDER_NAME )
+    add_google_drive_folder_links("ic12", group_dict, service, drive_activity_service, PROJECTS_FOLDER_NAME )
 
     session = make_google_chat_conversations.get_session()
 
-    #add_chat_folder_link(group_dict, session)
+    add_chat_folder_link(group_dict, session)
 
 
-    #generate_links_to_jupyter_notebooks(
+    # generate_links_to_jupyter_notebooks(
     #     service,
     #     group_dict,
     #     notebook_file_id,
     #     notebook_file_name,
     #     PROJECTS_FOLDER_NAME,
-    #     filter=[],
+    #     filter=filter,
     #     GROUP_CATEGORY_ID=GROUP_CATEGORY_ID,
     #     drive_activity_service=drive_activity_service,
     #     canvas_assignment_name="ic12",
     # )
     
-    generate_links_to_ic10_folders(
-        service,
-        group_dict,
-        "CS5A S25 ic10",
-        filter=[],
-        drive_activity_service=drive_activity_service,
-        canvas_assignment_name="ic12",
-    )
+    # generate_links_to_ic10_folders(
+    #     service,
+    #     group_dict,
+    #     "CS5A S25 ic10",
+    #     filter=[],
+    #     drive_activity_service=drive_activity_service,
+    #     canvas_assignment_name="ic12",
+    # )

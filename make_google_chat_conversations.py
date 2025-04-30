@@ -307,10 +307,13 @@ def main(session, group_folders, STUDENT_CSV):
     for group_name in group_names:
         if group_name == "":
             continue
-        group_number = int(group_name.split(' ')[1])
-        
-        if group_number not in [4]:
+
+        try:
+            group_number = int(group_name.split(' ')[1])
+        except (IndexError, ValueError):
+            print(f"⚠️ Invalid group name format: {group_name}")
             continue
+   
 
         student_emails = groups[group_name]
         space_display_name = get_space_name_from_group_name(group_name)
@@ -422,7 +425,8 @@ if __name__ == "__main__":
     
     session = get_session()
     group_folders = get_group_folders(GROUP_CATEGORY_ID)
-    main(session, group_folders, STUDENT_CSV=STUDENT_CSV)
+    print(f"Group folders: {group_folders}")
+    #main(session, group_folders, STUDENT_CSV=STUDENT_CSV)
     add_group_chat_urls_to_group_folder(session, group_folders)
     
     write_group_folders(group_folders, GROUP_CATEGORY_ID)
