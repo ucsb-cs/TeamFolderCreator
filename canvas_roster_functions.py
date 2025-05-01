@@ -3,6 +3,9 @@ import csv
 from pprint import pprint
 import re
 import sys
+import inspect
+import time
+import pytz
 
 # === CONFIGURATION ===
 API_URL = "https://ucsb.instructure.com/api/v1"
@@ -21,7 +24,13 @@ COURSE_ID = "25658"  # You can get this from the URL in Canvas
 HEADERS = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
 
 
-def get_groups(category_id):
+def function_name():
+    return inspect.stack()[1].function
+
+def press_return_to_continue():
+    input("Press Return to continue...")
+
+def get_groups(category_id, COURSE_ID=COURSE_ID):
     url = f"{API_URL}/group_categories/{category_id}/groups"
     all_groups = []
     while url:
@@ -361,7 +370,7 @@ def locate_assignment_by_id(assignment_id):
     return response.json()
 
 
-def locate_assignment(assignment_name):
+def locate_assignment(assignment_name, COURSE_ID=COURSE_ID):
     url = f"{API_URL}/courses/{COURSE_ID}/assignments"
     assignments = []
     while url:
@@ -410,8 +419,6 @@ def add_feedback_to_submission_unless_duplicate(assignment_id, student_id, comme
     if not assignment:
         print(f"Assignment with id '{assignment_id}' not found.")
         return
-    
-    print(f"Adding feedback for assignment name: {assignment['name']}")
 
     assignment_id = assignment["id"]
     comments = get_submission_comments_graphql(COURSE_ID, student_id, assignment_id)
@@ -419,17 +426,63 @@ def add_feedback_to_submission_unless_duplicate(assignment_id, student_id, comme
         
     for existing_comment in comments:
         existing_html = existing_comment["htmlComment"]
+    
         if existing_html.strip() == comment.strip():
             print(f"Comment already exists for student {student_id}.")
             return
  
+ 
+    if comments == []:
+        print(f"Graphql returned no coments for {student_id}.")
+        comments_via_rest = get_submission_comments(COURSE_ID, student_id, assignment_id)
+        if comments_via_rest == []:
+            print(f"REST API returned no comments for {student_id}.")
+        else:
+            print(f"REST API returned comment for {student_id}:")
+            for existing_comment in comments_via_rest:
+                equal_to_existing = comment.strip() == existing_comment.strip()
+
+                print(f"Existing comment, equal to new comment: {equal_to_existing}")
+                print("***************")
+                print(existing_comment)
+                print("***************")
+            press_return_to_continue()
+ 
+    print(f"{function_name()} called with assignment_id: {assignment_id}, student_id: {student_id}:")
+    print("***ABOUT TO ADD NEW COMMENT:***")
+    print("****** Comment *****")
+    print(comment)
+    print("********************")
+    
+    print("***Existing comments:*****")
+    pprint(comments)
+    print("***********************")
+    press_return_to_continue()
+
     print(f"Adding comment to submission for student {student_id}...")
     # Add the new comment
     add_feedback_to_submission(assignment_id, student_id, comment)
 
 
-def get_submission_comments(assignment_id, student_id):
+def get_submission_comments(COURSE_ID, assignment_id, student_id):
     url = f"{API_URL}/courses/{COURSE_ID}/assignments/{assignment_id}/submissions/{student_id}"
+    params = {
+        "include[]": "submission_comments"
+    }
+    response = requests.get(url, headers=HEADERS, params=params)
+    response.raise_for_status()
+    submission = response.json()
+    pprint(submission)
+    comments = []
+    if 'submission_comments' in submission:
+        for comment in submission['submission_comments']:
+            comments.append(comment['comment'])  # or comment['text_comment'] depending on API version
+
+    return comments
+
+
+def get_submission_comments(course_id, user_id, assignment_id):
+    url = f"{API_URL}/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}"
     params = {
         "include[]": "submission_comments"
     }
@@ -443,8 +496,6 @@ def get_submission_comments(assignment_id, student_id):
             comments.append(comment['comment'])  # or comment['text_comment'] depending on API version
 
     return comments
-
-
 
 def get_submission_comments_graphql(course_id, user_id, asssignment_id):
     url = f"""{API_URL.replace("v1","")}/graphql"""
@@ -506,6 +557,13 @@ def get_submission_comments_graphql(course_id, user_id, asssignment_id):
     response.raise_for_status()
     data = response.json()
     
+    print(f"GraphQL result status code: {response.status_code}")
+    # Print all status information we can get back from a requests respose
+    print(f"GraphQL result headers: {response.headers}")
+    print(f"GraphQL result text: {response.text}")
+    print(f"GraphQL result json: {data}")
+
+
     if 'errors' in data:
         print("GraphQL errors:", data['errors'])
         return []
@@ -537,8 +595,6 @@ def get_submission_comments_graphql(course_id, user_id, asssignment_id):
                 }
                 htmlComments.append(thisComment) 
     
-    
-    pprint(htmlComments)
     return htmlComments
 
     # comments = []

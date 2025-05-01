@@ -16,7 +16,7 @@
 # The script is intended for educational purposes and should be used responsibly.
 
 
-SLEEP = 0.5  # seconds
+SLEEP = 1.1  # seconds
 
 import csv
 import json
@@ -49,8 +49,10 @@ ACTIVITY_NAME = "CS5A S25 Wk4"
 def function_name():
     return inspect.stack()[1].function
 
+
 def called_by():
     return inspect.stack()[2].function
+
 
 def group_name_filter(group_name):
     if "Week-4-Lecture-Group " in group_name:
@@ -81,7 +83,7 @@ def authenticate():
             creds = flow.run_local_server(port=0)
         with open(TOKEN_FILE, "w") as token:
             token.write(creds.to_json())
-            print("Token saved to %s\n", TOKEN_FILE)
+            print(f"Token saved to {TOKEN_FILE}")
 
     return creds
 
@@ -110,16 +112,19 @@ def get_welcome_text_week4(space_display_name, group_folders, group_name):
            edits that at a time.
            """
 
+
 def get_group_number_from_group_name(group_name):
     # Extract the group number using an regulat expressions,
     # assuming the group name is in the format: "CS5A S25 Midterm -  3 (W noon)"
     # The group number comes after the first hyphen and before the space.
     # Example: "CS5A S25 Midterm - 3 (W noon)" -> "3"
     import re
+
     match = re.search(r"\s*(\d+)\s*", group_name)
     if match:
         return int(match.group(1))
     return None
+
 
 def get_welcome_text_midterm(space_display_name, group_folders, group_name):
     group_folder_url = group_folders[group_name]["folder_url"]
@@ -253,12 +258,12 @@ def person_id_to_ucsb_email(session, person_id):
         return None
     return person_to_ucsb_email(person)
 
+
 def person_id_to_name(session, person_id):
     person = get_person(session, person_id)
     if not person:
         return None
     return person_to_name(person)
-
 
 
 def get_existing_members_emails(session, space):
@@ -278,7 +283,6 @@ def get_existing_members_emails(session, space):
         user_id = member_info.get("name", "").split("/")[-1]
         if user_id:
             user_ids.append(user_id)
-
 
     # Use People API to fetch emails for the user IDs
     emails = []
@@ -350,7 +354,7 @@ def add_group_chat_urls_to_group_folder(session, group_folders, ACTIVITY_NAME):
 
 def get_recent_messages(session, space):
     messages_url = f"https://chat.googleapis.com/v1/{space['name']}/messages"
-    params = {"pageSize": 50, "orderBy": "createTime desc"}
+    params = {"pageSize": 50, "orderBy": "createTime asc"}
     resp = session.get(messages_url, params=params)
     if resp.status_code != 200:
         print(
@@ -358,12 +362,21 @@ def get_recent_messages(session, space):
         )
         return None
     messages = resp.json().get("messages", [])
+
+    # Add the URL of each message to the message data
+    for message in messages:
+        message_id = message.get("name", "").split("/")[-1]
+        if message_id:
+            message["url"] = (
+                f"https://chat.google.com/room/{space['name'].split('/')[1]}/{message_id}"
+            )
+
     return messages
 
 
 def folder_name_sort_key(folder_name):
     # Extract the number from the folder name
-    # Assuming the folder name is in the format "Group X"
+    # Assuming the folder name is iquin the format "Group X"
 
     try:
         return int(folder_name.split(" ")[1])
@@ -443,8 +456,6 @@ def create_group_chats(
     session, group_folders, STUDENT_CSV, ACTIVITY_NAME, welcome_text_function=None
 ):
 
-
-
     # Reads group_export_nnnnn.csv
     # Creates a dictionary `groups` with key as group_name, and values as a list of student emails
 
@@ -468,9 +479,9 @@ def create_group_chats(
         if group_number is None:
             print(f"⚠️ Invalid group name format: {group_name}")
             continue
-        
-        # if group_number < 34:
-        #     continue
+
+        if group_number < 30:
+            continue
 
         try:
             group_number = int(group_name.split(" ")[1])
@@ -539,13 +550,14 @@ def get_space_from_space_name(session, space_name):
     return space
 
 
-def read_chat_messages(session, group_folders):
+def read_chat_messages(session, group_folders, process_messages_for_this_group=None):
     result = []
-    
+
     group_names = list(group_folders.keys())
     group_names.sort(key=folder_name_sort_key)
-    
+
     for group_name in group_names:
+        this_groups_messages = []
         if group_name == "":
             continue
         data = group_folders[group_name]
@@ -562,15 +574,20 @@ def read_chat_messages(session, group_folders):
                 if not person:
                     print(f"⚠️ Failed to get person {user_id}: {person}")
                     sys.exit(1)
-                result.append(
-                    {
-                        "group_name": group_name,
-                        "message": message,
-                        "sender": person,
-                        "email": person_to_ucsb_email(person),
-                    }
-                )
-        return result # REMOVE THIS AFTER DEBUGGING
+                space_id = message["name"].split("/")[1]
+                this_message = {
+                    "group_name": group_name,
+                    "message": message,
+                    "sender": person,
+                    "email": person_to_ucsb_email(person),
+                    "space_name": space_name,
+                    "space_display_name": space["displayName"],
+                    "space_url": f"https://chat.google.com/room/{space_id}",
+                }
+                result.append(this_message)
+                this_groups_messages.append(this_message)
+        if process_messages_for_this_group:
+            process_messages_for_this_group(group_name, this_groups_messsages)
         time.sleep(SLEEP)  # Respect rate limits
     return result
 
@@ -591,11 +608,10 @@ def print_chat_message_data(chat_message_data):
             email = data["email"]
         if "message" in data and "text" in data["message"]:
             text = data["message"]["text"]
-  
+
         print(
             f"group: {data['group_name']} Sender: {displayName} email: {data['email']} text: {repr(text[0:30])}"
         )
-
 
 
 def write_group_folders_with_chat_groups(group_folders, GROUP_CATEGORY_ID):
@@ -625,14 +641,14 @@ def write_group_folders_with_chat_groups(group_folders, GROUP_CATEGORY_ID):
             )
     print(f"✅ Group folders written to {output_file}")
 
+
 def invite_staff_to_group_chats(session, group_folders, SECTION_TO_STAFF_EMAILS):
-    
+
     group_names = list(group_folders.keys())
     group_names.sort(key=folder_name_sort_key)
-    
+
     print(f"Groups names: {group_names}")
 
-    
     for group_name in group_names:
         if group_name == "":
             continue
@@ -648,10 +664,9 @@ def invite_staff_to_group_chats(session, group_folders, SECTION_TO_STAFF_EMAILS)
         print(f"Section: {section}")
         space = get_existing_space(session, space_display_name)
 
-
         # Invite staff members
         staff_emails = SECTION_TO_STAFF_EMAILS[section]
-        
+
         # Get existing members
         existing_members_list = get_existing_members_emails(session, space)
 
@@ -674,6 +689,7 @@ def invite_staff_to_group_chats(session, group_folders, SECTION_TO_STAFF_EMAILS)
 
     print("✅ All staff processed successfully.")
 
+
 if __name__ == "__main__":
 
     SECTION_TO_STAFF_EMAILS = {
@@ -688,21 +704,14 @@ if __name__ == "__main__":
             "christoszangos@ucsb.edu",
             "danish_ebadulla@ucsb.edu",
             "calais@ucsb.edu",
-            "jejansen@ucsb.edu"
-    
+            "jejansen@ucsb.edu",
         ],
-        "2pm": [
-            "xchen774@ucsb.edu",
-            "christoszangos@ucsb.edu",
-            "rachitgupta@ucsb.edu"
-         
-        ],
+        "2pm": ["xchen774@ucsb.edu", "christoszangos@ucsb.edu", "rachitgupta@ucsb.edu"],
         "3pm": [
             "sanjaychandrasekaran@ucsb.edu",
             "xchen774@ucsb.edu",
             "ktivinjack@ucsb.edu",
-            "calais@ucsb.edu"
- 
+            "calais@ucsb.edu",
         ],
         "4pm": [
             "li_an@ucsb.edu",
@@ -720,12 +729,16 @@ if __name__ == "__main__":
         "22633"  # You can get this from the URL in Canvas (for week4 groups)
     )
 
-    # (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID. ACTIVITY_NAME) = ('cs5a-s25-ic12', WEEK4_GROUP_SET_ID, "CS5A S25 Wk4")
     (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID, ACTIVITY_NAME) = (
-        "cs5a-s25-midterm",
-        MIDTERM_GROUP_SET_ID,
-        "CS5A S25 Midterm",
+        "cs5a-s25-ic12",
+        WEEK4_GROUP_SET_ID,
+        "CS5A S25 Wk4",
     )
+    # (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID, ACTIVITY_NAME) = (
+    #     "cs5a-s25-midterm",
+    #     MIDTERM_GROUP_SET_ID,
+    #     "CS5A S25 Midterm",
+    # )
 
     STUDENT_CSV = f"group_export_{GROUP_CATEGORY_ID}.csv"
 
@@ -744,6 +757,4 @@ if __name__ == "__main__":
     # chat_message_data = read_chat_messages(session, group_folders)
     # print_chat_message_data(chat_message_data)
 
-    invite_staff_to_group_chats(session, group_folders, SECTION_TO_STAFF_EMAILS)
-    
-    
+    #invite_staff_to_group_chats(session, group_folders, SECTION_TO_STAFF_EMAILS)
