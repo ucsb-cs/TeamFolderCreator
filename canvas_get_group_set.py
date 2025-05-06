@@ -23,8 +23,8 @@ COURSE_ID = "25658"  # You can get this from the URL in Canvas
 MIDTERM_GROUP_SET_ID = "22640"  # You can get this from the URL in Canvas (for midterm groups)
 WEEK4_GROUP_SET_ID = "22633"  # You can get this from the URL in Canvas (for week4 groups)
 
-#GROUP_CATEGORY_ID = MIDTERM_GROUP_SET_ID
-GROUP_CATEGORY_ID = WEEK4_GROUP_SET_ID
+GROUP_CATEGORY_ID = MIDTERM_GROUP_SET_ID
+#GROUP_CATEGORY_ID = WEEK4_GROUP_SET_ID
 
 OUTPUT_FILE = f"group_export_{GROUP_CATEGORY_ID}.csv"
 

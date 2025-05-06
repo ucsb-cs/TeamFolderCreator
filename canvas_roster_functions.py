@@ -155,8 +155,28 @@ def get_students(COURSE_ID=COURSE_ID):
     filtered_students = [
         student for student in all_students if student["name"] != "Test Student"
     ]
+    fix_umails(filtered_students)
     return filtered_students
 
+def fix_umails(students):
+    # For each student, change @umail.ucsb.edu to @ucsb.edu
+    for i in range(len(students)):
+        student = students[i]
+        if "email" in student:
+            email = student["email"]
+            if "@umail.ucsb.edu" in email:
+                new_email = email.replace("@umail.ucsb.edu", "@ucsb.edu")
+                students[i]["email"] = new_email
+    return students
+                
+def get_user_id_to_student_dict(COURSE_ID=COURSE_ID):
+    students = get_students(COURSE_ID)
+    fix_umails(students)
+    user_id_to_student = {}
+    for student in students:
+        user_id = student["id"]
+        user_id_to_student[user_id] = student
+    return user_id_to_student
 
 def get_sections(COURSE_ID=COURSE_ID):
     # Use Canvas API to get all sections in the course
@@ -385,7 +405,7 @@ def locate_assignment(assignment_name, COURSE_ID=COURSE_ID):
             return assignment
     return None
 
-def get_assignment_submissions(assignment_id):
+def get_assignment_submissions(assignment_id, COURSE_ID=COURSE_ID):
     url = f"{API_URL}/courses/{COURSE_ID}/assignments/{assignment_id}/submissions"
     all_submissions = []
     while url:
@@ -625,6 +645,20 @@ def get_submission_comments_graphql(course_id, user_id, asssignment_id):
     # return comments
 
 
+def get_user_details(user_id, COURSE_ID=COURSE_ID):
+    # Use the Canvas API to get user details
+
+    print(f"Getting user details for user ID: {user_id}")
+    url = f"{API_URL}/users/{user_id}"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    result = response.json()
+    if "errors" in result:
+        print("Error:", result["errors"])
+        return None
+    print(f"{function_name()} user details for {user_id}:")
+    pprint(result)
+    return response.json()
 
 if __name__ == "__main__":
     pass

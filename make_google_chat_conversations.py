@@ -46,6 +46,9 @@ STAFF_FILE = "staff.txt"
 ACTIVITY_NAME = "CS5A S25 Wk4"
 
 
+def press_return_to_continue():
+    input("Press Return to continue...")
+    
 def function_name():
     return inspect.stack()[1].function
 
@@ -502,6 +505,8 @@ def create_group_chats(
             print(f"✅ Space {space_display_name} already exists.")
         else:
             # Create space
+            print(f"🚀 Creating space {space_display_name}...")
+            press_return_to_continue()
             space = create_new_space(session, space_display_name)
             if not space:
                 print(f"❌ Failed to create space {space_display_name}.")
@@ -520,6 +525,7 @@ def create_group_chats(
                 print(f"✅ {email} already in {space_display_name}.")
                 continue
             print(f"🔄 Inviting {email} to {space_display_name}...")
+            press_return_to_continue()
             member_payload = {"member": {"name": f"users/{email}", "type": "HUMAN"}}
             invite_url = f"https://chat.googleapis.com/v1/{space['name']}/members"
             r = session.post(invite_url, json=member_payload)
@@ -729,16 +735,16 @@ if __name__ == "__main__":
         "22633"  # You can get this from the URL in Canvas (for week4 groups)
     )
 
-    (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID, ACTIVITY_NAME) = (
-        "cs5a-s25-ic12",
-        WEEK4_GROUP_SET_ID,
-        "CS5A S25 Wk4",
-    )
     # (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID, ACTIVITY_NAME) = (
-    #     "cs5a-s25-midterm",
-    #     MIDTERM_GROUP_SET_ID,
-    #     "CS5A S25 Midterm",
+    #     "cs5a-s25-ic12",
+    #     WEEK4_GROUP_SET_ID,
+    #     "CS5A S25 Wk4",
     # )
+    (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID, ACTIVITY_NAME) = (
+        "cs5a-s25-midterm",
+        MIDTERM_GROUP_SET_ID,
+        "CS5A S25 Midterm",
+    )
 
     STUDENT_CSV = f"group_export_{GROUP_CATEGORY_ID}.csv"
 
@@ -751,10 +757,5 @@ if __name__ == "__main__":
 
     add_group_chat_urls_to_group_folder(session, group_folders, ACTIVITY_NAME)
     write_group_folders_with_chat_groups(group_folders, GROUP_CATEGORY_ID)
-
-    # group_folders = get_group_folders_with_chat(GROUP_CATEGORY_ID)
-    # print("reading chat messages...")
-    # chat_message_data = read_chat_messages(session, group_folders)
-    # print_chat_message_data(chat_message_data)
 
     #invite_staff_to_group_chats(session, group_folders, SECTION_TO_STAFF_EMAILS)
