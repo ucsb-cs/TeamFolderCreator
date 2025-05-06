@@ -6,6 +6,10 @@ from pprint import pprint
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import re
+import inspect
+
+def function_name():
+    return inspect.stack()[1].function
 
 def add_readers_from_url(drive_service, file_url, email_list):
     """
@@ -17,13 +21,20 @@ def add_readers_from_url(drive_service, file_url, email_list):
     - email_list: List of email addresses to be added as readers
     """
     # Extract file ID from URL
-    match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
-    if not match:
-        match = re.search(r'id=([a-zA-Z0-9_-]+)', file_url)
-    if not match:
-        match = re.search(r'/drive/([a-zA-Z0-9_-]+)', file_url)
-    if not match:
-        raise ValueError("Could not extract file ID from URL")
+    if not "google.com" in file_url:
+        print(f"{function_name()} Error: URL does note appear to be a google drive URL: {file_url}")
+        return
+    try:
+        match = re.search(r'/d/([a-zA-Z0-9_-]+)', file_url)
+        if not match:
+            match = re.search(r'id=([a-zA-Z0-9_-]+)', file_url)
+        if not match:
+            match = re.search(r'/drive/([a-zA-Z0-9_-]+)', file_url)
+        if not match:
+            raise ValueError("Could not extract file ID from URL")
+    except Exception as e:
+        print(f"{function_name()} Error extracting file id from url: {file_url}: Exception is: {e}")
+        return
 
     file_id = match.group(1)
 
