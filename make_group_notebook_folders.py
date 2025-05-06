@@ -1212,7 +1212,7 @@ if __name__ == "__main__":
     )
 
     # (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ("cs5a-s25-ic12", WEEK4_GROUP_SET_ID)
-    (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ('cs5a-s25-midterm', MIDTERM_GROUP_SET_ID)
+    (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ('cs5a-s25-midterm-folders', MIDTERM_GROUP_SET_ID)
 
 
     # filter = [
@@ -1229,6 +1229,22 @@ if __name__ == "__main__":
 
     group_dict = make_group_dictionary(group_data)
 
+
+
+    # parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
+    # (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(
+    #      service, PROJECTS_FOLDER_NAME
+    #  )
+    # make_group_folders(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=filter, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
+    parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
+    # (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(
+    #      service, PROJECTS_FOLDER_NAME
+    #  )
+    
+    #make_group_folders_with_single_notebook(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
+    make_group_folders(service, group_dict, PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
+
+
     populate_group_dict_with_folder_urls(
         service,
         group_dict,
@@ -1237,26 +1253,13 @@ if __name__ == "__main__":
         GROUP_CATEGORY_ID=GROUP_CATEGORY_ID,
     )
 
-    # parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
-    # (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(
-    #      service, PROJECTS_FOLDER_NAME
-    #  )
-    # make_group_folders(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=filter, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
-    parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
-    (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(
-         service, PROJECTS_FOLDER_NAME
-     )
-    
-    #make_group_folders_with_single_notebook(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
-    make_group_folders(service, group_dict, PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
-
     # scan_group_folders(service, drive_activity_service, PROJECTS_FOLDER_NAME, group_dict)
 
-    add_google_drive_folder_links("ic12", group_dict, service, drive_activity_service, PROJECTS_FOLDER_NAME )
+    # add_google_drive_folder_links("ic12", group_dict, service, drive_activity_service, PROJECTS_FOLDER_NAME )
 
-    session = make_google_chat_conversations.get_session()
+    # session = make_google_chat_conversations.get_session()
 
-    add_chat_folder_link(group_dict, session)
+    # add_chat_folder_link(group_dict, session)
 
 
     # generate_links_to_jupyter_notebooks(
