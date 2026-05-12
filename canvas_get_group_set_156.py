@@ -18,9 +18,9 @@ with open("CANVAS_API_TOKEN", "r") as token_file:
 # The number at the end is the group category ID.
 # e.g. in this case, 22613.  Put that nummber as the definitino for GROUP_CATEGORY_ID
 
-COURSE_ID = "25659"  # CS156 S25
+COURSE_ID = "32781"  # CS156 S26
 
-TEAMS_GROUP_SET_ID = "21872"  # You can get this from the URL in Canvas (for midterm groups)
+TEAMS_GROUP_SET_ID = "28352"  # You can get this from the URL in Canvas (for midterm groups)
 
 GROUP_CATEGORY_ID = TEAMS_GROUP_SET_ID
 #GROUP_CATEGORY_ID = WEEK4_GROUP_SET_ID

@@ -22,7 +22,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/drive.activity.readonly",
     "https://www.googleapis.com/auth/contacts.readonly",
-    'https://www.googleapis.com/auth/chat.spaces',
+    "https://www.googleapis.com/auth/chat.spaces",
 ]
 INITIAL_PROJECTS_FOLDER_NAME = "Initial Contents"
 
@@ -111,6 +111,114 @@ def get_values_from_spreadsheet(service, sheet_id):
     )
     values = result.get("values", [])
     return values
+
+
+def create_new_retro_file_google_doc(
+    service, group_drive_folder_id, group_name, members, retro_file_name="Retro1"
+):
+    print(
+        f"Google Doc {retro_file_name} does not exist in {group_name}. Creating new Google Doc..."
+    )
+
+    # Create a new Google Doc
+    doc_metadata = {
+        "name": retro_file_name,
+        "mimeType": "application/vnd.google-apps.document",
+        "parents": [group_drive_folder_id],
+    }
+    doc = service.files().create(body=doc_metadata, fields="id").execute()
+    return doc
+
+
+def get_all_tab_titles(tabs):
+    """Recursively extracts all tab titles from the document tree."""
+    titles = []
+    for tab in tabs:
+        # Get title from tabProperties
+        titles.append(tab.get("tabProperties", {}).get("title"))
+        # Check for nested child tabs
+        if "childTabs" in tab:
+            titles.extend(get_all_tab_titles(tab["childTabs"]))
+    return titles
+
+
+def add_tabs_for_each_member(service, doc, group_name, members):
+    """
+    Add a new tab to the Google Doc for each member.
+    """
+    # Initialize the Docs API service
+    docs_service = build("docs", "v1", credentials=service._http.credentials)
+    document_id = doc["id"]
+
+    # 1. Fetch document with tabs enabled
+    # We MUST include includeTabsContent=True to see the 'tabs' field
+    document = docs_service.documents().get(
+        documentId=document_id, 
+        includeTabsContent=True
+    ).execute()
+    
+    # 2. Get flat list of existing tab names
+    existing_tabs = document.get("tabs", [])
+    
+    existing_titles = get_all_tab_titles(existing_tabs)
+    
+    print(f"Existing tabs in document '{group_name}': {existing_titles}")
+
+    # 3. Build the requests using 'createTab'
+    requests = []
+    for member in members:
+        member_name = member["student_name"]
+        
+        if member_name in existing_titles:
+            print(f"Tab '{member_name}' already exists. Skipping.")
+            continue
+
+        # Correct API field name is 'createTab'
+        requests.append({
+            "addDocumentTab": {
+                "tabProperties": {
+                    "title": member_name
+                }
+            }
+        })
+
+    # 4. Execute the update if there are new tabs to add
+    if requests:
+        docs_service.documents().batchUpdate(
+            documentId=document_id, 
+            body={"requests": requests}
+        ).execute()
+        print(f"Successfully added {len(requests)} tabs to the document.")
+    else:
+        print("All member tabs already exist.")
+
+
+def create_or_update_retro_file_google_doc(
+    service, group_drive_folder_id, group_name, members, retro_file_name="Retro1"
+):
+    # Check if a Google Doc with the target name already exists
+    print(
+        f"Checking for existing retro file {retro_file_name} in group folder: {group_name}..."
+    )
+    query = f"name='{retro_file_name}' and mimeType='application/vnd.google-apps.document' and '{group_drive_folder_id}' in parents"
+    results = (
+        service.files()
+        .list(q=query, spaces="drive", fields="files(id, name)")
+        .execute()
+    )
+    docs = results.get("files", [])
+
+    if docs:
+        print(
+            f"Google Doc {retro_file_name} already exists in {group_name}. Skipping creation."
+        )
+        doc = docs[0]
+    else:
+        doc = create_new_retro_file_google_doc(
+            service, group_drive_folder_id, group_name, members, retro_file_name
+        )
+    print(f"Google Doc for group {group_name} is {doc}.")
+    add_tabs_for_each_member(service, doc, group_name, members)
 
 
 def create_or_update_member_file_google_sheet(
@@ -238,125 +346,6 @@ def create_new_tab_member_file_google_sheet(
     )
 
 
-def copy_notebook_file(
-    service, notebook_file_id, new_name, group_drive_folder_id, group_name
-):
-    # Check if a file with the target name already exists in the group folder
-    existing_files = list_files_in_folder(service, group_drive_folder_id)
-    file_exists = any(file["name"] == new_name for file in existing_files)
-    if file_exists:
-        print(f"  File {new_name} already exists in {group_name}. Skipping copy.")
-        return
-    try:
-        print(f"About to create file called {new_name} in {group_name}")
-        if new_name in ["CS5A-S25-ic12_FINAL_0.ipynb", "CS5A-S25-ic12_Ali_Aouda_0.ipynb"]:
-            print("Skipping file copy...")
-            return;
-        if new_name not in ["CS5A-S25-ic12_Julian_Jeong_0.ipynb","CS5A-S25-ic12_Tianyue_Hao_0.ipynb","CS5A-S25-ic12_Jaden_Latimore_0.ipynb"]:
-            sys.exit(0);
-        copy_file(service, notebook_file_id, new_name, group_drive_folder_id)
-        print(f"  Copied {notebook_file_name} to {group_name} as {new_name}")
-    except HttpError as e:
-        print(f"  Failed to copy into {group_name}: {e}")
-
-
-def copy_initial_notebook_file_to_group(
-    service,
-    group_drive_folder_id,
-    group_name,
-    members,
-    notebook_file_id,
-    notebook_file_name,
-):
-    print(f"\nCopying notebook file into {group_name}...")
-
-    final_notebook_file_name = notebook_file_name.replace(".ipynb", f"_FINAL_0.ipynb")
-    copy_notebook_file(
-        service,
-        notebook_file_id,
-        final_notebook_file_name,
-        group_drive_folder_id,
-        group_name,
-    )
-    for member in members:
-        name_with_underscores = member["student_name"].replace(" ", "_")
-        new_name = notebook_file_name.replace(
-            ".ipynb", f"_{name_with_underscores}_0.ipynb"
-        )
-        copy_notebook_file(service, notebook_file_id, new_name, group_drive_folder_id, group_name)
-
-
-def make_group_folders_with_single_notebook(
-    service,
-    group_dict,
-    notebook_file_id,
-    notebook_file_name,
-    PROJECTS_FOLDER_NAME,
-    filter=None,
-    GROUP_CATEGORY_ID=None,
-):
-
-    # Step 1: Create the parent Projects folder
-    parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
-
-    # Step 2: Create group folders and assign permissions
-    group_folders = {}
-
-    print(f"Filter: {filter}")
-    groups = list(group_dict.keys())
-    groups.sort(key=folder_name_sort_key)
-    for group in groups:
-        value = group_dict[group]
-
-        if group == "":
-            print(f"Skipping group {group} as it has no name.")
-            names = [member["student_name"] for member in value["members"]]
-            print(f"This group has the following members: {names}")
-            continue
-
-        if filter and group not in filter:
-            print(f"Skipping group {group} as it is not in the filter list.")
-            continue
-
-        print(f"Creating folder for group: {group}...")
-
-        group_drive_folder_id = create_folder(service, group, parent_folder_id)
-        group_dict[group][
-            "folder_url"
-        ] = f"https://drive.google.com/drive/folders/{group_drive_folder_id}"
-        group_dict[group]["group_drive_folder_id"] = group_drive_folder_id
-
-        # Give this user write access to the group folder
-        for student in value["members"]:
-            email = student["email"]
-            share_folder(service, group_drive_folder_id, email)
-
-        create_or_update_member_file_google_sheet(
-            service, group_drive_folder_id, group, value["members"]
-        )
-        copy_initial_notebook_file_to_group(
-            service,
-            group_drive_folder_id,
-            group,
-            value["members"],
-            notebook_file_id,
-            notebook_file_name,
-        )
-
-    # Output the group dictionary to a CSV file
-    output_file = f"group_folders_{GROUP_CATEGORY_ID}.csv"
-    with open(output_file, "w", newline="") as csvfile:
-        fieldnames = ["Group Name", "Folder URL"]
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        for group_name, group_info in group_dict.items():
-            writer.writerow(
-                {"Group Name": group_name, "Folder URL": group_info["folder_url"]}
-            )
-
-    print(f"Done. Output saved to {output_file}.")
-
-
 def make_group_folders(
     service,
     group_dict,
@@ -404,6 +393,14 @@ def make_group_folders(
             service, group_drive_folder_id, group, value["members"]
         )
 
+        create_or_update_retro_file_google_doc(
+            service,
+            group_drive_folder_id,
+            group,
+            value["members"],
+            retro_file_name=f"Retro1-{group}",
+        )
+
     # Output the group dictionary to a CSV file
     output_file = f"group_folders_{GROUP_CATEGORY_ID}.csv"
     with open(output_file, "w", newline="") as csvfile:
@@ -416,7 +413,6 @@ def make_group_folders(
             )
 
     print(f"Done. Output saved to {output_file}.")
-
 
 
 def populate_group_dict_with_folder_urls(
@@ -837,7 +833,7 @@ def add_google_drive_folder_links(
     service,
     drive_activity_service,
     PROJECTS_FOLDER_NAME,
-    addFeedback=False
+    addFeedback=False,
 ):
 
     # Step 0: locate the canvas assignment
@@ -880,327 +876,8 @@ def add_google_drive_folder_links(
                 )
 
 
-def add_editors_to_list_of_files(service, drive_activity_service, files):
-    for file in files:
-        file_id = file["id"]
-        file_name = file["name"]
-        # Get history of the file
 
-        file_editors = list_editors(drive_activity_service, file_id, file_name)
-        file["editors"] = file_editors
-    return files
 
-
-def get_files_in_folder_recursively(service, folder_id):
-    """Recursively find all files in a folder and its subfolders."""
-    results = (
-        service.files()
-        .list(
-            q=f"'{folder_id}' in parents and trashed = false",
-            spaces="drive",
-            fields="files(id, name, mimeType, parents, createdTime, modifiedTime, size, webViewLink)",
-        )
-        .execute()
-    )
-    files = results.get("files", [])
-
-    all_files = []
-    for file in files:
-        if file["mimeType"] == "application/vnd.google-apps.folder":
-            # If it's a folder, recursively find files in it
-            subfolder_files = get_files_in_folder_recursively(service, file["id"])
-            all_files.extend(subfolder_files)
-        else:
-            all_files.append(file)
-
-    return all_files
-
-
-def make_html_list_of_editors(editors):
-    """Make an HTML list of editors."""
-    if not editors:
-        return ""
-    mapped_editors = list(
-        map(lambda editor: f"{editor['display_name']} ({editor['email']})", editors)
-    )
-    return "<br />".join(mapped_editors)
-
-
-def html_for_modfied_time(file):
-    if "modifiedTime" in file:
-        modified_time = file["modifiedTime"]
-        # Convert the modified time to local time
-        # Assuming the modified time is in UTC
-        modified_time = time.mktime(
-            time.strptime(modified_time, "%Y-%m-%dT%H:%M:%S.%fZ")
-        )
-        # Convert to local time
-        modfied_time_in_local_time = time.strftime(
-            "%m-%d %H:%M", time.localtime(modified_time)
-        )
-        return f"{modfied_time_in_local_time}"
-    return ""
-
-
-def html_for_created_time(file):
-    if "createdTime" in file:
-        created_time = file["createdTime"]
-        # Convert the created time to local time
-        # Assuming the created time is in UTC
-        created_time = time.mktime(time.strptime(created_time, "%Y-%m-%dT%H:%M:%S.%fZ"))
-        # Convert to local time
-        created_time_in_local_time = time.strftime(
-            "%m-%d %H:%M", time.localtime(created_time)
-        )
-        return f"{created_time_in_local_time}"
-    return ""
-
-
-def list_of_editor_emails(file):
-    if "editors" in file:
-        return [editor["email"] for editor in file["editors"]]
-    return []
-
-
-def html_table_of_files(files, heading):
-    text = f"<p><b>{heading}</b></p>\n"
-    if not files:
-        return text + f"<p>No such files</p>\n"
-
-    text += """
-    <table border="1" cellpadding="5" cellspacing="0">
-      <thead>
-        <tr>
-            <th>File</th>
-            <th>Created</th>
-            <th>Modified</th>
-            <th>Editors</th>
-        </tr>
-        </thead>
-        <tbody>
-    """
-
-    for file in files:
-        file_id = file["id"]
-        file_name = file["name"]
-        url = file["webViewLink"]
-        text += f"    <tr>\n"
-        text += f"          <td><a href='{url}'>{file_name}</a></td>\n"
-        text += f"          <td>{html_for_created_time(file)}</td>\n"
-        text += f"          <td>{html_for_modfied_time(file)}</td>\n"
-        text += f"          <td>{make_html_list_of_editors(file['editors'])}</td>\n"
-        text += f"    </tr>\n"
-
-    text += """
-      </tbody>
-    </table>
-    """
-
-    return text
-
-
-def html_for_member_files(member_files, name_with_underscores, group, email):
-    if not member_files:
-        return f"<p>That folder contains no files with {name_with_underscores} the name.</li>"
-
-    member_files_edited_by_user = [
-        file for file in member_files if email in list_of_editor_emails(file)
-    ]
-    member_files_not_edited_by_user = [
-        file for file in member_files if email not in list_of_editor_emails(file)
-    ]
-    text = ""
-
-    header = f"<p>Files in {group} folder that have been edited by {email}:</p>\n"
-    text += html_table_of_files(member_files_edited_by_user, header)
-
-    header = f"<p>Files in {group} folder that have NOT been edited by {email}:</p>\n"
-    text += html_table_of_files(member_files_not_edited_by_user, header)
-
-    return text
-
-
-def html_for_files_ic10(member_files, group, email):
-    if not member_files:
-        return f"<p>That folder contains no files.</li>"
-
-    member_files_edited_by_user = [
-        file for file in member_files if email in list_of_editor_emails(file)
-    ]
-    member_files_not_edited_by_user = [
-        file for file in member_files if email not in list_of_editor_emails(file)
-    ]
-    text = ""
-
-    header = f"<p>Files in ic10 {group} folder that have been edited by {email}:</p>\n"
-    text += html_table_of_files(member_files_edited_by_user, header)
-
-    header = f"<p>Files in ic10 {group} folder that have NOT been edited by {email}:</p>\n"
-    text += html_table_of_files(member_files_not_edited_by_user, header)
-
-    return text
-
-
-
-def generate_links_to_jupyter_notebooks(
-    service,
-    group_dict,
-    notebook_file_id,
-    notebook_file_name,
-    PROJECTS_FOLDER_NAME,
-    filter=None,
-    GROUP_CATEGORY_ID=None,
-    drive_activity_service=None,
-    canvas_assignment_name=None,
-):
-
-    # Step 0: locate the canvas assignment
-
-    assignment = canvas_roster_functions.locate_assignment(canvas_assignment_name)
-    if not assignment:
-        raise Exception(f"Assignment {canvas_assignment_name} not found.")
-
-    assignment_id = assignment["id"]
-
-
-    # Step 1: Get the projects folder (create returns it's id)
-
-    parent_folder_id = create_folder(
-        service, PROJECTS_FOLDER_NAME, create_if_not_exists=False
-    )
-
-    # Step 2: Create group folders and assign permissions
-    group_folders = {}
-
-    print(f"Filter: {filter}")
-    groups = list(group_dict.keys())
-    groups.sort()
-    for group in groups:
-        value = group_dict[group]
-
-        if group == "":
-            print(f"Skipping group {group} as it has no name.")
-            names = [member["student_name"] for member in value["members"]]
-            print(f"This group has the following members: {names}")
-            continue
-
-        if filter and group not in filter:
-            print(f"Skipping group {group} as it is not in the filter list.")
-            continue
-
-        group_drive_folder_id = create_folder(
-            service, group, parent_folder_id, create_if_not_exists=False
-        )
-        group_dict[group][
-            "folder_url"
-        ] = f"https://drive.google.com/drive/folders/{group_drive_folder_id}"
-        group_folder_url = group_dict[group]["folder_url"]
-        group_dict[group]["group_drive_folder_id"] = group_drive_folder_id
-
-        files = get_files_in_folder_recursively(service, group_drive_folder_id)
-        add_editors_to_list_of_files(service, drive_activity_service, files)
-
-        for member in value["members"]:
-            name_with_underscores = member["student_name"].replace(" ", "_")
-            email = member["email"]
-            student_id = member["student_id"]
-
-            text = f"""<p>Your group's Google Drive folder is: <a href="{group_folder_url}">{group}</a></p>\n"""
-            text += f"""<p>Your group chat is at <a href="{group_dict[group]['space_url']}">{group_dict[group]['space_display_name']}</a></p>\n"""
-
-            member_files = [
-                file for file in files if name_with_underscores in file["name"]
-            ]
-            text += html_for_member_files(
-                member_files, name_with_underscores, group, email
-            )
-                    
-            print(f"Adding feedback for {member['student_name']} ")
-            canvas_roster_functions.add_feedback_to_submission_unless_duplicate(assignment_id, student_id, text)
-
-
-def generate_links_to_ic10_folders(
-    service,
-    group_dict,
-    PROJECTS_FOLDER_NAME,
-    filter=None,
-    drive_activity_service=None,
-    canvas_assignment_name=None,
-):
-
-    # Step 0: locate the canvas assignment
-
-    assignment = canvas_roster_functions.locate_assignment(canvas_assignment_name)
-    if not assignment:
-        raise Exception(f"Assignment {canvas_assignment_name} not found.")
-
-    assignment_id = assignment["id"]
-
-
-    # Step 1: Get the projects folder (create returns it's id)
-
-    parent_folder_id = create_folder(
-        service, PROJECTS_FOLDER_NAME, create_if_not_exists=False
-    )
-
-    # Step 2: Locate Group Folders
-    group_folders = {}
-
-    print(f"Filter: {filter}")
-    groups = list(group_dict.keys())
-    groups.sort()
-    for group in groups:
-        value = group_dict[group]
-
-        if group == "":
-            print(f"Skipping group {group} as it has no name.")
-            names = [member["student_name"] for member in value["members"]]
-            print(f"This group has the following members: {names}")
-            continue
-
-        if filter and group not in filter:
-            print(f"Skipping group {group} as it is not in the filter list.")
-            continue
-
-        group_drive_folder_id = create_folder(
-            service, group, parent_folder_id, create_if_not_exists=False
-        )
-        group_dict[group][
-            "folder_url_ic10"
-        ] = f"https://drive.google.com/drive/folders/{group_drive_folder_id}"
-        group_folder_url = group_dict[group]["folder_url_ic10"]
-        group_dict[group]["group_drive_folder_id_ic10"] = group_drive_folder_id
-
-        files = get_files_in_folder_recursively(service, group_drive_folder_id)
-        add_editors_to_list_of_files(service, drive_activity_service, files)
-
-        for member in value["members"]:
-            email = member["email"]
-            student_id = member["student_id"]
-
-            text = f"""<p>Your group's ic10 Google Drive folder is: <a href="{group_folder_url}">{group}</a></p>\n"""
-
-    
-            text += html_for_files_ic10(
-                files,  group, email
-            )
-    
-            print(f"Adding feedback for {member['student_name']} ")
-            canvas_roster_functions.add_feedback_to_submission_unless_duplicate(assignment_id, student_id, text)
-        
-        
-        
-def add_chat_folder_link(group_dict, service):
-     for group_name in group_dict.keys():
-        space_display_name = make_google_chat_conversations.get_space_name_from_group_name(group_name)
-        space = make_google_chat_conversations.get_existing_space(service, space_display_name)
-        if not space:
-            print(f"❌ Space {space_display_name} not found.")
-            continue
-        space_url = "https://chat.google.com/room/" + space['name'].split('/')[1]
-        group_dict[group_name]['space_name'] = space['name']
-        group_dict[group_name]['space_display_name'] = space['displayName']
-        group_dict[group_name]['space_url'] = space_url
 
 if __name__ == "__main__":
 
@@ -1212,15 +889,17 @@ if __name__ == "__main__":
     )
 
     # (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ("cs5a-s25-ic12", WEEK4_GROUP_SET_ID)
-    (PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID) = ('cs5a-s25-midterm-folders', MIDTERM_GROUP_SET_ID)
-
+    PROJECTS_FOLDER_NAME, GROUP_CATEGORY_ID = (
+        "cs5a-s25-midterm-folders",
+        MIDTERM_GROUP_SET_ID,
+    )
 
     # filter = [
     #     "Week-4-Lecture-Group 23",
     #     "Week-4-Lecture-Group 25",
     #     "Week-4-Lecture-Group-33"]
 
-    filter=None
+    filter = None
 
     service = authenticate()
     drive_activity_service = authorize_drive_activity_api()
@@ -1228,8 +907,6 @@ if __name__ == "__main__":
     group_data = csv_to_dict(f"group_export_{GROUP_CATEGORY_ID}.csv")
 
     group_dict = make_group_dictionary(group_data)
-
-
 
     # parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
     # (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(
@@ -1240,10 +917,15 @@ if __name__ == "__main__":
     # (notebook_file_id, notebook_file_name) = get_notebook_file_id_and_name(
     #      service, PROJECTS_FOLDER_NAME
     #  )
-    
-    #make_group_folders_with_single_notebook(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
-    make_group_folders(service, group_dict, PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
 
+    # make_group_folders_with_single_notebook(service, group_dict, notebook_file_id, notebook_file_name,  PROJECTS_FOLDER_NAME, filter=None, GROUP_CATEGORY_ID=GROUP_CATEGORY_ID)
+    make_group_folders(
+        service,
+        group_dict,
+        PROJECTS_FOLDER_NAME,
+        filter=None,
+        GROUP_CATEGORY_ID=GROUP_CATEGORY_ID,
+    )
 
     populate_group_dict_with_folder_urls(
         service,
@@ -1261,7 +943,6 @@ if __name__ == "__main__":
 
     # add_chat_folder_link(group_dict, session)
 
-
     # generate_links_to_jupyter_notebooks(
     #     service,
     #     group_dict,
@@ -1273,7 +954,7 @@ if __name__ == "__main__":
     #     drive_activity_service=drive_activity_service,
     #     canvas_assignment_name="ic12",
     # )
-    
+
     # generate_links_to_ic10_folders(
     #     service,
     #     group_dict,

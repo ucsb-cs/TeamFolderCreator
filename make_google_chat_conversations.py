@@ -598,6 +598,40 @@ def read_chat_messages(session, group_folders, process_messages_for_this_group=N
     return result
 
 
+def read_chat_messages_given_groups(session, groups):
+    result = []
+
+    for group in groups:
+        group_name = group["group_name"]
+        this_groups_messages = []
+
+        space_name = ""
+
+        space = get_space_from_space_name(session, space_name)
+        print(f"Reading messages from {space_name}...")
+        messages = get_recent_messages(session, space)
+        if messages:
+            for message in messages:
+                user_id = message["sender"]["name"].split("/")[-1]
+                person = get_person(session, user_id)
+                if not person:
+                    print(f"⚠️ Failed to get person {user_id}: {person}")
+                    sys.exit(1)
+                space_id = message["name"].split("/")[1]
+                this_message = {
+                    "group_name": group_name,
+                    "message": message,
+                    "sender": person,
+                    "email": person_to_ucsb_email(person),
+                    "space_name": space_name,
+                    "space_display_name": space["displayName"],
+                    "space_url": f"https://chat.google.com/room/{space_id}",
+                }
+                result.append(this_message)
+                this_groups_messages.append(this_message)
+        time.sleep(SLEEP)  # Respect rate limits
+    return result
+
 def print_chat_message_data(chat_message_data):
     for data in chat_message_data:
         if data["email"] == "phtcon@ucsb.edu":

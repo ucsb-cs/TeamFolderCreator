@@ -137,53 +137,58 @@ if __name__ == "__main__":
             student_email = student['email'].replace("@umail.ucsb.edu","@ucsb.edu")
             student_email_to_group[student['email']] = group['name']
 
-    canvas_assignment_name = "ic13"    
+    canvas_assignment_name = "ic14"    
     assignment = canvas_roster_functions.locate_assignment(canvas_assignment_name, COURSE_ID=COURSE_ID)
     if not assignment:
         raise Exception(f"Assignment {canvas_assignment_name} not found.")
     assignment_id = assignment["id"]
+    print("Assignment *************************")
+    pprint(assignment)
 
     session = make_google_chat_conversations.get_session()
-    group_folders = make_google_chat_conversations.get_group_folders(GROUP_CATEGORY_ID)
+    # group_folders = make_google_chat_conversations.get_group_folders(GROUP_CATEGORY_ID)
     
 
-    group_folders = make_google_chat_conversations.get_group_folders_with_chat(GROUP_CATEGORY_ID)
+    # group_folders = make_google_chat_conversations.get_group_folders_with_chat(GROUP_CATEGORY_ID)
 
 
-    chat_message_data =  make_google_chat_conversations.read_chat_messages(session, group_folders)
-
+    chat_message_data =  make_google_chat_conversations.read_chat_messages_given_groups(session, groups)
+    print("chat_message_data *************************")
+    pprint(chat_message_data)
+    
     summarized_chat_message_data = summarize_chat_messages(chat_message_data)
-
+    print("summarized_chat_message_data *************************")
+    pprint(summarized_chat_message_data)
    
-    add_canvas_post_text(summarized_chat_message_data)
+    # add_canvas_post_text(summarized_chat_message_data)
     
-    print(f"len(students): {len(all_students)}")
-    for student in all_students:
-        print(f"Adding feedback for student: {student['name']}")
-        email = student['email'].replace("@umail.ucsb.edu","@ucsb.edu")
-        group_name = student_email_to_group.get(email)
-        if group_name is None:
-            print(f"WARNING: No group found for student {student['name']} with email {email}")
-            continue
-        print(f"Group: {group_name}")
-        if email in summarized_chat_message_data:
-            canvas_roster_functions.add_feedback_to_submission_unless_duplicate(
-                assignment_id,
-                student['id'],
-                summarized_chat_message_data[email]['canvas_post_text'],
-            )
-        else:
-            if group_name not in group_folders:
-                print("Skippping stuudnt {student['name']} because no group folder found")
-                print(f"WARNING: No group folder found for group {group_name}")
-                continue
-            space_url = group_folders.get(group_name).get("space_url")
-            message = no_chat_message_found(student, group_name, "No messages found in Google Chat", space_url)
-            print(f"No chat messages found for {student['name']}")
-            print("message: ", message)
-            canvas_roster_functions.add_feedback_to_submission_unless_duplicate(
-                assignment_id,
-                student['id'],
-                message,
-            )
+    # print(f"len(students): {len(all_students)}")
+    # for student in all_students:
+    #     print(f"Adding feedback for student: {student['name']}")
+    #     email = student['email'].replace("@umail.ucsb.edu","@ucsb.edu")
+    #     group_name = student_email_to_group.get(email)
+    #     if group_name is None:
+    #         print(f"WARNING: No group found for student {student['name']} with email {email}")
+    #         continue
+    #     print(f"Group: {group_name}")
+    #     if email in summarized_chat_message_data:
+    #         canvas_roster_functions.add_feedback_to_submission_unless_duplicate(
+    #             assignment_id,
+    #             student['id'],
+    #             summarized_chat_message_data[email]['canvas_post_text'],
+    #         )
+    #     else:
+    #         if group_name not in group_folders:
+    #             print("Skippping stuudnt {student['name']} because no group folder found")
+    #             print(f"WARNING: No group folder found for group {group_name}")
+    #             continue
+    #         space_url = group_folders.get(group_name).get("space_url")
+    #         message = no_chat_message_found(student, group_name, "No messages found in Google Chat", space_url)
+    #         print(f"No chat messages found for {student['name']}")
+    #         print("message: ", message)
+    #         canvas_roster_functions.add_feedback_to_submission_unless_duplicate(
+    #             assignment_id,
+    #             student['id'],
+    #             message,
+    #         )
             
