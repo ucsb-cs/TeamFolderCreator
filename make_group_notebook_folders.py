@@ -1,6 +1,7 @@
 import os
 import json
 import csv
+import string
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -146,6 +147,9 @@ def add_tabs_for_each_member(service, doc, group_name, members):
     """
     Add a new tab to the Google Doc for each member.
     """
+    
+    requests = []
+
     # Initialize the Docs API service
     docs_service = build("docs", "v1", credentials=service._http.credentials)
     document_id = doc["id"]
@@ -160,12 +164,27 @@ def add_tabs_for_each_member(service, doc, group_name, members):
     # 2. Get flat list of existing tab names
     existing_tabs = document.get("tabs", [])
     
+    print(f"Existing tabs: {existing_tabs}")
+    
     existing_titles = get_all_tab_titles(existing_tabs)
     
     print(f"Existing tabs in document '{group_name}': {existing_titles}")
+    
+    if existing_tabs and existing_tabs[0].get("tabProperties", {}).get("title") == "Tab 1":
+        print("Renaming default 'Tab 1' to 'Main'...")
+        tabId = existing_tabs[0]["tabProperties"]["tabId"]
+        print("Tab ID of default tab: ", tabId)
+        requests.append({
+            "updateDocumentTabProperties": {
+                "tabProperties": {
+                    "tabId": tabId,
+                    "title": "Main"
+                },
+                "fields": "title"
+            }
+        })
 
     # 3. Build the requests using 'createTab'
-    requests = []
     for member in members:
         member_name = member["student_name"]
         
