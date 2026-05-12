@@ -2,6 +2,7 @@ import os
 import json
 import csv
 import string
+from xmlrpc.client import boolean
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -12,6 +13,7 @@ import pickle
 from pprint import pprint
 import time
 import sys
+
 
 import canvas_roster_functions
 import make_google_chat_conversations
@@ -24,6 +26,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive.activity.readonly",
     "https://www.googleapis.com/auth/contacts.readonly",
     "https://www.googleapis.com/auth/chat.spaces",
+    "https://www.googleapis.com/auth/documents.currentonly",
+    "https://www.googleapis.com/auth/documents",
 ]
 INITIAL_PROJECTS_FOLDER_NAME = "Initial Contents"
 
@@ -143,101 +147,90 @@ def get_all_tab_titles(tabs):
     return titles
 
 
-def add_tabs_for_each_member(service, doc, group_name, members):
+def get_document_from_document_id(service, document_id):
+    docs_service = build("docs", "v1", credentials=service._http.credentials)
+    document = (
+        docs_service.documents()
+        .get(documentId=document_id, includeTabsContent=True)
+        .execute()
+    )
+    return document
+
+
+def rename_tabs_for_each_member(service, doc, group_name, members):
     """
     Add a new tab to the Google Doc for each member.
     """
-    
+
     requests = []
+
+    orig_tab_name_to_new_tab_name = {}
+    for i, member in enumerate(members):
+        member_name = member["student_name"]
+        orig_tab_name = f"Member{i+1}"
+        orig_tab_name_to_new_tab_name[orig_tab_name] = member_name
 
     # Initialize the Docs API service
     docs_service = build("docs", "v1", credentials=service._http.credentials)
-    document_id = doc["id"]
+    document = get_document_from_document_id(service, doc["id"])
 
-    # 1. Fetch document with tabs enabled
-    # We MUST include includeTabsContent=True to see the 'tabs' field
-    document = docs_service.documents().get(
-        documentId=document_id, 
-        includeTabsContent=True
-    ).execute()
-    
     # 2. Get flat list of existing tab names
     existing_tabs = document.get("tabs", [])
-    
-    print(f"Existing tabs: {existing_tabs}")
-    
     existing_titles = get_all_tab_titles(existing_tabs)
-    
+
     print(f"Existing tabs in document '{group_name}': {existing_titles}")
-    
-    if existing_tabs and existing_tabs[0].get("tabProperties", {}).get("title") == "Tab 1":
-        print("Renaming default 'Tab 1' to 'Main'...")
-        tabId = existing_tabs[0]["tabProperties"]["tabId"]
-        print("Tab ID of default tab: ", tabId)
-        requests.append({
-            "updateDocumentTabProperties": {
-                "tabProperties": {
-                    "tabId": tabId,
-                    "title": "Main"
-                },
-                "fields": "title"
-            }
-        })
 
-    # 3. Build the requests using 'createTab'
-    for member in members:
-        member_name = member["student_name"]
-        
-        if member_name in existing_titles:
-            print(f"Tab '{member_name}' already exists. Skipping.")
-            continue
-
-        # Correct API field name is 'createTab'
-        requests.append({
-            "addDocumentTab": {
-                "tabProperties": {
-                    "title": member_name
+    for tab in existing_tabs:
+        tab_title = get_tab_name(tab)
+        if tab_title in orig_tab_name_to_new_tab_name:
+            new_tab_name = orig_tab_name_to_new_tab_name[tab_title]
+            print(f"Renaming tab '{tab_title}' to '{new_tab_name}'...")
+            tabId = tab["tabProperties"]["tabId"]
+            print("Tab ID: ", tabId)
+            requests.append(
+                {
+                    "updateDocumentTabProperties": {
+                        "tabProperties": {"tabId": tabId, "title": new_tab_name},
+                        "fields": "title",
+                    }
                 }
-            }
-        })
+            )
 
     # 4. Execute the update if there are new tabs to add
     if requests:
         docs_service.documents().batchUpdate(
-            documentId=document_id, 
-            body={"requests": requests}
+            documentId=doc["id"], body={"requests": requests}
         ).execute()
         print(f"Successfully added {len(requests)} tabs to the document.")
     else:
         print("All member tabs already exist.")
 
 
-def create_or_update_retro_file_google_doc(
-    service, group_drive_folder_id, group_name, members, retro_file_name="Retro1"
-):
-    # Check if a Google Doc with the target name already exists
-    print(
-        f"Checking for existing retro file {retro_file_name} in group folder: {group_name}..."
-    )
-    query = f"name='{retro_file_name}' and mimeType='application/vnd.google-apps.document' and '{group_drive_folder_id}' in parents"
+def locate_retro_file_template(service, parent_folder_id, retro_file_name="Retro1"):
+    # Locate a folder called "TEMPLATES" in the group folder
+    templates_folder = find_folder(service, "TEMPLATES", parent_id=parent_folder_id)
+    if not templates_folder:
+        raise Exception(
+            f"TEMPLATES folder not found in parent folder {parent_folder_id}."
+        )
+    print(f"Located TEMPLATES folder in parent folder {parent_folder_id}.")
+    # Locate a file with the name retro_file_name in the TEMPLATES folder
+    query = f"name='{retro_file_name}' and mimeType='application/vnd.google-apps.document' and '{templates_folder['id']}' in parents"
     results = (
         service.files()
         .list(q=query, spaces="drive", fields="files(id, name)")
         .execute()
     )
-    docs = results.get("files", [])
+    templates = results.get("files", [])
+    if not templates:
+        raise Exception(
+            f"Template file '{retro_file_name}' not found in TEMPLATES folder."
+        )
+    return templates[0]
 
-    if docs:
-        print(
-            f"Google Doc {retro_file_name} already exists in {group_name}. Skipping creation."
-        )
-        doc = docs[0]
-    else:
-        doc = create_new_retro_file_google_doc(
-            service, group_drive_folder_id, group_name, members, retro_file_name
-        )
-    print(f"Google Doc for group {group_name} is {doc}.")
-    add_tabs_for_each_member(service, doc, group_name, members)
+
+def get_tab_name(tab):
+    return tab.get("tabProperties", {}).get("title")
 
 
 def create_or_update_member_file_google_sheet(
@@ -365,6 +358,86 @@ def create_new_tab_member_file_google_sheet(
     )
 
 
+def update_retro_file_google_doc(
+    service, group_drive_folder_id, group, members, retro_file_name
+):
+    # Get the file ID of the retro file in the group folder
+    query = f"name='{retro_file_name}' and mimeType='application/vnd.google-apps.document' and '{group_drive_folder_id}' in parents"
+    results = (
+        service.files()
+        .list(q=query, spaces="drive", fields="files(id, name)")
+        .execute()
+    )
+    docs = results.get("files", [])
+    if not docs:
+        raise Exception(
+            f"Retro file '{retro_file_name}' not found in group folder '{group}'."
+        )
+    doc = docs[0]
+
+    # Get the tabs, and ensure we have a 'Main' and 'Members' tab
+    document = get_document_from_document_id(service, doc["id"])
+    existing_tabs = document.get("tabs", [])
+    existing_titles = get_all_tab_titles(existing_tabs)
+
+    if "Main" not in existing_titles:
+        raise Exception(f"Retro file '{retro_file_name}' does not have a 'Main' tab.")
+
+    rename_tabs_for_each_member(service, doc, group, members)
+    search_and_replace_group_and_member_names(service, doc["id"], group, members)
+
+
+def search_and_replace_group_and_member_names(
+    service, document_id, group_name, members
+):
+
+    substitutions = {
+        "%TEAM%": group_name,
+        "%MEMBERS%": ", ".join([member["student_name"] for member in members]),
+        "%MEMBER1%": members[0]["student_name"] if len(members) > 0 else "",
+        "%MEMBER2%": members[1]["student_name"] if len(members) > 1 else "",
+        "%MEMBER3%": members[2]["student_name"] if len(members) > 2 else "",
+        "%MEMBER4%": members[3]["student_name"] if len(members) > 3 else "",
+        "%MEMBER5%": members[4]["student_name"] if len(members) > 4 else "",
+        "%MEMBER6%": members[5]["student_name"] if len(members) > 5 else "",
+    }
+
+    requests = []
+
+    for key, value in substitutions.items():
+        requests.append(search_and_replace_in_doc_request(key, value))
+
+    docs_service = build("docs", "v1", credentials=service._http.credentials)
+    docs_service.documents().batchUpdate(
+        documentId=document_id, body={"requests": requests}
+    ).execute()
+
+
+def search_and_replace_in_doc_request(search_text, replace_text):
+    return {
+        "replaceAllText": {
+            "replaceText": replace_text,
+            "containsText": {
+               "text": search_text,
+                 "matchCase": True,
+                 "searchByRegex": False
+            }
+        }
+    }
+
+def delete_existing_files(service, file_name, folder_id):
+    query = f"name='{file_name}' and '{folder_id}' in parents"
+    results = (
+        service.files()
+        .list(q=query, spaces="drive", fields="files(id, name)")
+        .execute()
+    )
+    files = results.get("files", [])
+    for file in files:
+        print(f"Deleting existing file '{file['name']}' with ID {file['id']} in folder {folder_id}...")
+        service.files().delete(fileId=file["id"]).execute()
+
+
 def make_group_folders(
     service,
     group_dict,
@@ -375,6 +448,20 @@ def make_group_folders(
 
     # Step 1: Create the parent Projects folder
     parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
+
+    retroFileName = f"Retro1"
+    template = locate_retro_file_template(service, parent_folder_id, retroFileName)
+    print(
+        f"Located retro file template: id: {template['id']}, name: {template['name']}"
+    )
+
+    # Step 1a: Get the template document and extract existing tab names for later comparison
+
+    template_document = get_document_from_document_id(service, template["id"])
+
+    existing_tabs = template_document.get("tabs", [])
+    existing_titles = get_all_tab_titles(existing_tabs)
+    print(f"Existing tab names in Template: {existing_titles}")
 
     # Step 2: Create group folders and assign permissions
     group_folders = {}
@@ -412,12 +499,20 @@ def make_group_folders(
             service, group_drive_folder_id, group, value["members"]
         )
 
-        create_or_update_retro_file_google_doc(
+        new_name = f"{retroFileName}-{group}"
+
+        delete_existing_files(service, new_name, group_drive_folder_id)
+
+        copy_file(
+            service, template["id"], new_name, group_drive_folder_id
+        )
+
+        update_retro_file_google_doc(
             service,
             group_drive_folder_id,
             group,
             value["members"],
-            retro_file_name=f"Retro1-{group}",
+            retro_file_name=f"{retroFileName}-{group}",
         )
 
     # Output the group dictionary to a CSV file
@@ -516,6 +611,18 @@ def list_files_in_folder(service, folder_id):
         .execute()
     )
     return results.get("files", [])
+
+
+def copy_file_if_not_exists(service, file_id, new_name, parent_id):
+    """Copy a file into a folder if a file with the same name does not already exist."""
+    existing_files = list_files_in_folder(service, parent_id)
+    for file in existing_files:
+        if file["name"] == new_name:
+            print(
+                f"File with name '{new_name}' already exists in folder {parent_id}. Skipping copy."
+            )
+            return file
+    return copy_file(service, file_id, new_name, parent_id)
 
 
 def copy_file(service, file_id, new_name, parent_id):
@@ -893,9 +1000,6 @@ def add_google_drive_folder_links(
                 print(
                     f"Added feedback for {student['student_name']} in group {group_name} with ID {student_id}."
                 )
-
-
-
 
 
 if __name__ == "__main__":
