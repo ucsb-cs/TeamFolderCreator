@@ -438,18 +438,19 @@ def delete_existing_files(service, file_name, folder_id):
         service.files().delete(fileId=file["id"]).execute()
 
 
-def make_group_folders(
+def make_group_folders_with_retro(
     service,
     group_dict,
     PROJECTS_FOLDER_NAME,
     filter=None,
     GROUP_CATEGORY_ID=None,
+    retroFileName="Retro1",
+    
 ):
 
     # Step 1: Create the parent Projects folder
     parent_folder_id = create_folder(service, PROJECTS_FOLDER_NAME)
 
-    retroFileName = f"Retro1"
     template = locate_retro_file_template(service, parent_folder_id, retroFileName)
     print(
         f"Located retro file template: id: {template['id']}, name: {template['name']}"
