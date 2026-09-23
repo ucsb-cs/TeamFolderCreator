@@ -8,6 +8,9 @@ Run it again whenever the groups change in Canvas. It never creates
 duplicates and never deletes anything; it only adds what is missing and
 updates what is out of date.
 
+Optionally, it can also bookmark each team's folder in that team's Slack
+channel (see [Slack bookmarks](#slack-bookmarks-optional)).
+
 ## What it creates
 
 Given the name of an existing Google Drive folder (say
@@ -118,8 +121,9 @@ choose user type **Internal** instead, which needs no publishing.
 
 ### 4. Protect the tokens
 
-`CANVAS_API_TOKEN`, `credentials.json` and `token.json` grant access to your
-Canvas courses and your Google Drive. Treat them like passwords:
+`CANVAS_API_TOKEN`, `credentials.json`, `token.json` (and `SLACK_TOKEN` if
+you use it) grant access to your Canvas courses, your Google Drive and your
+Slack workspace. Treat them like passwords:
 
 * They are listed in `.gitignore`. **Never commit them.** Check with
   `git status --ignored` if in doubt.
@@ -211,8 +215,65 @@ All options (`python create_team_folders.py --help`):
 | `--canvas-token-file`  | `CANVAS_API_TOKEN`              | File holding the Canvas token (env var `CANVAS_API_TOKEN` overrides it) |
 | `--credentials`        | `credentials.json`              | Google OAuth client file                                                |
 | `--token`              | `token.json`                    | Where the Google login is cached                                        |
+| `--update-slack-bookmarks` | off                         | Also bookmark each folder in its team's Slack channel (see below)       |
+| `--slack-token-file`   | `SLACK_TOKEN`                   | File holding the Slack token (env var `SLACK_TOKEN` overrides it)       |
 | `--dry-run`            | off                             | Report what would change; change nothing                                |
 | `-v`, `--verbose`      | off                             | Debug output                                                            |
+
+## Slack bookmarks (optional)
+
+If each team has a Slack channel named `team-<group name>` (for a Canvas
+group `s26-01`, the channel `#team-s26-01`), the script can add a bookmark
+called **Google Drive Folder** to each channel that links to the team's
+folder:
+
+```bash
+python create_team_folders.py --course "CMPSC 156" --term "Fall 2026" \
+    --group-set "Project Groups" --folder-name "CS156-F26-Team-Folders" \
+    --update-slack-bookmarks
+```
+
+This runs after the Drive folders are created or updated. For each group it
+looks for the channel; if there is none it prints a warning and moves on.
+Re-running is safe: an existing **Google Drive Folder** bookmark is left
+alone if its link is unchanged, or edited if the folder link changed, so
+you never get duplicates. Other bookmarks in the channel are not touched.
+
+Channel names are derived from group names by lower-casing, turning spaces
+into `-`, and dropping characters Slack doesn't allow, so `Group 2` maps
+to `#team-group-2`.
+
+### Set up the Slack token
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) and click
+   **Create New App > From scratch**. Name it (e.g. `TeamFolderCreator`) and
+   pick your course workspace.
+2. Under **OAuth & Permissions > Scopes**, add these **Bot Token Scopes**:
+   * `channels:read` to find the `#team-...` channels
+   * `bookmarks:read` to see whether the bookmark already exists
+   * `bookmarks:write` to add or update it
+   * `groups:read` only if some team channels are private
+3. Click **Install to Workspace** and approve. Copy the **Bot User OAuth
+   Token** (it starts with `xoxb-`).
+4. Save it in a file named `SLACK_TOKEN` in this directory (one line), or
+   export it as the `SLACK_TOKEN` environment variable:
+
+   ```bash
+   echo 'xoxb-PASTE-TOKEN-HERE' > SLACK_TOKEN
+   chmod 600 SLACK_TOKEN
+   ```
+
+5. The app must be a member of each team channel to add bookmarks. Invite it
+   in each channel with `/invite @TeamFolderCreator` (or whatever you named
+   the app). Channels where it is not a member are reported as warnings.
+
+`SLACK_TOKEN` is in `.gitignore`; protect it like the other tokens. If it
+leaks, go to the app's **OAuth & Permissions** page and click **Revoke**
+(or reinstall the app to rotate the token).
+
+You can use a user token (`xoxp-`) instead, with the same scopes added
+under **User Token Scopes**; then the bookmarks are added as you, and *you*
+must be a member of each team channel.
 
 ## How it works
 
@@ -226,6 +287,9 @@ All options (`python create_team_folders.py --help`):
   find-or-create by name, list/add/remove permissions, read/write the first
   two columns of a sheet. Every write honours `--dry-run`. Transient API
   errors (rate limits, 5xx) are retried automatically.
+* `slack_bookmarks.py` (only with `--update-slack-bookmarks`) lists the
+  workspace's channels once, then for each team checks the channel's
+  bookmarks and adds or edits the **Google Drive Folder** one.
 * `team_folders.py` does the work in this order: find the parent folder,
   `GroupFolders` (plus "anyone with the link" access), then for each group
   its folder, its member permissions, and its Members sheet; finally the
@@ -258,6 +322,15 @@ Group folders are sorted naturally in the index (`Group 2` before
 * **`could not enable 'anyone with the link'`**: your Google Workspace
   forbids link sharing. Share `GroupFolders` manually with the audience you
   want.
+* **`--update-slack-bookmarks needs a Slack token`**: create the `SLACK_TOKEN`
+  file (see "Slack bookmarks").
+* **`The Slack token lacks the '...' scope`**: add the named scope in the
+  app's OAuth & Permissions page and reinstall the app to the workspace.
+* **`no Slack channel #team-...`**: the channel doesn't exist or isn't
+  visible to the token (private channels need `groups:read`). The script
+  continues with the other teams.
+* **`the Slack token's account is not a member of #team-...`**: invite the
+  app (or yourself, for a user token) to that channel and re-run.
 * **Browser login keeps reappearing every week**: see the note on consent
   screen Testing status in Setup step 3.
 * **Folders for old groups are listed as unmatched**: expected after groups

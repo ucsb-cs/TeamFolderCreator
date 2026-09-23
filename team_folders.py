@@ -128,6 +128,13 @@ def check_unique_names(teams: list[Team]) -> None:
         seen[key] = team.name
 
 
+@dataclass
+class SyncResult:
+    group_folders_id: str
+    index_id: str
+    team_folders: list[tuple[str, str]]  # (team name, folder url), in index order
+
+
 # --- sync steps --------------------------------------------------------------
 
 
@@ -207,8 +214,8 @@ def report_unmatched_folders(drive: Drive, group_folders_id: str, teams: list[Te
 
 def sync_team_folders(
     drive: Drive, teams: list[Team], student_emails: set[str], folder_name: str
-) -> tuple[str, str]:
-    """Create or update everything.  Returns (GroupFolders id, index spreadsheet id)."""
+) -> SyncResult:
+    """Create or update everything."""
     check_unique_names(teams)
     teams = sorted(teams, key=lambda t: natural_key(t.name))
 
@@ -241,4 +248,4 @@ def sync_team_folders(
     log.info("")
     log.info("%s folder:  %s", GROUP_FOLDERS_NAME, folder_url(group_folders_id))
     log.info("%s: %s", INDEX_SHEET_NAME, spreadsheet_url(index_id))
-    return group_folders_id, index_id
+    return SyncResult(group_folders_id, index_id, index_rows)

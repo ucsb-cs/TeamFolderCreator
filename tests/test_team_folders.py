@@ -177,7 +177,8 @@ class SyncTests(unittest.TestCase):
         self.students = {"al@x.edu", "bo@x.edu", "cy@x.edu", "dee@x.edu"}
 
     def test_first_run_creates_everything(self):
-        gf_id, index_id = sync_team_folders(self.drive, self.teams, self.students, "Top")
+        result = sync_team_folders(self.drive, self.teams, self.students, "Top")
+        gf_id, index_id = result.group_folders_id, result.index_id
         d = self.drive
         top = d.find_id("Top")
         self.assertEqual(d.items[gf_id]["parent"], top)
@@ -200,6 +201,11 @@ class SyncTests(unittest.TestCase):
              ["Group 10", f"https://drive.google.com/drive/folders/{g10}"]],
         )
         self.assertIn((index_id, "USER_ENTERED"), d.writes)
+        self.assertEqual(
+            result.team_folders,
+            [("Group 2", f"https://drive.google.com/drive/folders/{g2}"),
+             ("Group 10", f"https://drive.google.com/drive/folders/{g10}")],
+        )
 
     def test_missing_parent_folder_is_an_error(self):
         with self.assertRaises(DriveError):
@@ -242,14 +248,14 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(len(d.find_by_name("Group 2", d.find_id("GroupFolders"), team_folders.FOLDER_MIME)), 1)
 
     def test_staff_added_by_hand_are_kept(self):
-        gf_id, _ = sync_team_folders(self.drive, self.teams, self.students, "Top")
+        sync_team_folders(self.drive, self.teams, self.students, "Top")
         g2 = self.drive.find_id("Group 2")
         self.drive.add_writer(g2, "ta@x.edu")
         sync_team_folders(self.drive, self.teams, self.students, "Top")
         self.assertIn("ta@x.edu", self.drive.emails_with_role(g2, "writer"))
 
     def test_unmatched_folders_are_reported_not_deleted(self):
-        gf_id, _ = sync_team_folders(self.drive, self.teams, self.students, "Top")
+        gf_id = sync_team_folders(self.drive, self.teams, self.students, "Top").group_folders_id
         self.drive.find_or_create_folder("Old Group", gf_id)
         with self.assertLogs(team_folders.log, level="WARNING") as captured:
             sync_team_folders(self.drive, self.teams[:1], self.students, "Top")

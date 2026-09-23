@@ -1,5 +1,6 @@
 # Secrets -- never commit these
 CANVAS_API_TOKEN
+SLACK_TOKEN
 credentials.json
 token.json
 *.pkl

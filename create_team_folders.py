@@ -22,6 +22,7 @@ import sys
 
 import canvas_api
 import google_drive
+import slack_bookmarks
 import team_folders
 
 DEFAULT_CANVAS_URL = "https://ucsb.instructure.com"
@@ -29,6 +30,7 @@ DEFAULT_EMAIL_DOMAIN = "ucsb.edu"
 DEFAULT_TOKEN_FILE = "CANVAS_API_TOKEN"
 DEFAULT_CREDENTIALS_FILE = "credentials.json"
 DEFAULT_GOOGLE_TOKEN_FILE = "token.json"
+DEFAULT_SLACK_TOKEN_FILE = "SLACK_TOKEN"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -67,6 +69,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--credentials", default=DEFAULT_CREDENTIALS_FILE, help="Google OAuth client secrets file")
     parser.add_argument("--token", default=DEFAULT_GOOGLE_TOKEN_FILE, help="Where the Google login token is cached")
+    parser.add_argument(
+        "--update-slack-bookmarks", action="store_true",
+        help="Also add a 'Google Drive Folder' bookmark to each team's Slack channel "
+             "(#team-<group name>); needs a Slack token (see README)",
+    )
+    parser.add_argument(
+        "--slack-token-file", default=DEFAULT_SLACK_TOKEN_FILE,
+        help="File containing the Slack token (the SLACK_TOKEN environment variable overrides it)",
+    )
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Read from Canvas and Drive and report what would change, without changing anything",
@@ -125,6 +136,10 @@ def main(argv: list[str] | None = None) -> int:
         log.info("DRY RUN: nothing will be created or changed in Google Drive.")
 
     try:
+        slack_token = None
+        if args.update_slack_bookmarks:  # fail early if the token is missing
+            slack_token = slack_bookmarks.read_slack_token(args.slack_token_file)
+
         canvas = canvas_api.CanvasClient(args.canvas_url, read_canvas_token(args.canvas_token_file))
         course_id, group_set_id = resolve_ids(canvas, args, log)
         log.info("Reading groups from Canvas...")
@@ -138,8 +153,13 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Connecting to Google Drive...")
         creds = google_drive.load_credentials(args.credentials, args.token)
         drive = google_drive.Drive(creds, dry_run=args.dry_run)
-        team_folders.sync_team_folders(drive, teams, students, args.folder_name.strip())
-    except (canvas_api.CanvasError, google_drive.DriveError, ValueError) as e:
+        result = team_folders.sync_team_folders(drive, teams, students, args.folder_name.strip())
+
+        if slack_token:
+            log.info("Updating Slack bookmarks...")
+            slack = slack_bookmarks.SlackClient(slack_token)
+            slack_bookmarks.update_slack_bookmarks(slack, result.team_folders, dry_run=args.dry_run)
+    except (canvas_api.CanvasError, google_drive.DriveError, slack_bookmarks.SlackError, ValueError) as e:
         log.error("ERROR: %s", e)
         return 1
     return 0
