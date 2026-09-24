@@ -42,6 +42,17 @@ python create_team_folders.py --course-id 32781 --group-set-id 28352 \
     --folder-name "20264-CS156-F26"
 ```
 
+Once the team folders exist, `distribute_file.py` can copy a template Google
+Doc into every team's folder (see [Distributing a file to every team](#distributing-a-file-to-every-team-optional)
+for setup: it needs a `Templates` folder with exactly one Google Doc in it).
+It needs the same tokens set up as above:
+
+```bash
+python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
+    --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --file-name "Team Agreement, {team}"
+```
+
 ## What it creates
 
 Given the name of an existing Google Drive folder (say
