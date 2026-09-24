@@ -25,21 +25,23 @@ source venv/bin/activate
 python create_team_folders.py \
     --course "CMPSC 156" --term "Fall 2026" \
     --group-set "Project Groups" \
-    --folder-name "20264-CS156-F26"
+    --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders"
 ```
 
 Preview first if you like:
 
 ```bash
 python create_team_folders.py --course "CMPSC 156" --term "Fall 2026" \
-    --group-set "Project Groups" --folder-name "20264-CS156-F26" --dry-run
+    --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" --dry-run
 ```
 
 The same with Canvas ids instead of names:
 
 ```bash
 python create_team_folders.py --course-id 32781 --group-set-id 28352 \
-    --folder-name "20264-CS156-F26"
+    --folder-name "20264-CS156-F26" --group-folder-name "CS156-F26-GroupFolders"
 ```
 
 Once the team folders exist, `distribute_file.py` can copy a template Google
@@ -50,6 +52,7 @@ It needs the same tokens set up as above:
 ```bash
 python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
     --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" \
     --file-name "Team Agreement, {team}"
 ```
 
@@ -255,6 +258,7 @@ folder:
 ```bash
 python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
     --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" \
     --file-name "Team Agreement, {team}"
 ```
 
@@ -294,6 +298,7 @@ folder:
 ```bash
 python create_team_folders.py --course "CMPSC 156" --term "Fall 2026" \
     --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" \
     --update-slack-bookmarks
 ```
 
