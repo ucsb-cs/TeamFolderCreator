@@ -198,7 +198,9 @@ def sync_sheet(
     return sheet_id
 
 
-def report_unmatched_folders(drive: Drive, group_folders_id: str, teams: list[Team]) -> list[str]:
+def report_unmatched_folders(
+    drive: Drive, group_folders_id: str, teams: list[Team], group_folder_name: str = GROUP_FOLDERS_NAME
+) -> list[str]:
     expected = {t.name.lower() for t in teams}
     extra = sorted(
         f["name"] for f in drive.list_children(group_folders_id, FOLDER_MIME)
@@ -207,13 +209,17 @@ def report_unmatched_folders(drive: Drive, group_folders_id: str, teams: list[Te
     if extra:
         log.warning(
             "Folders in %s with no matching Canvas group (left untouched): %s",
-            GROUP_FOLDERS_NAME, ", ".join(extra),
+            group_folder_name, ", ".join(extra),
         )
     return extra
 
 
 def sync_team_folders(
-    drive: Drive, teams: list[Team], student_emails: set[str], folder_name: str
+    drive: Drive,
+    teams: list[Team],
+    student_emails: set[str],
+    folder_name: str,
+    group_folder_name: str = GROUP_FOLDERS_NAME,
 ) -> SyncResult:
     """Create or update everything."""
     check_unique_names(teams)
@@ -222,9 +228,9 @@ def sync_team_folders(
     top_id = drive.find_existing_folder(folder_name)
     log.info("Found parent folder '%s'", folder_name)
 
-    group_folders_id, created = drive.find_or_create_folder(GROUP_FOLDERS_NAME, top_id)
-    log.info("%s folder '%s'", did(drive, "Created", "create") if created else "Found", GROUP_FOLDERS_NAME)
-    ensure_anyone_can_read(drive, group_folders_id, GROUP_FOLDERS_NAME)
+    group_folders_id, created = drive.find_or_create_folder(group_folder_name, top_id)
+    log.info("%s folder '%s'", did(drive, "Created", "create") if created else "Found", group_folder_name)
+    ensure_anyone_can_read(drive, group_folders_id, group_folder_name)
 
     # Anyone who is (or was) a student, or is in any group, may be removed from a
     # folder they no longer belong to.  Everyone else is left alone.
@@ -243,9 +249,9 @@ def sync_team_folders(
     # USER_ENTERED so the URLs in column B become clickable links.
     index_id = sync_sheet(drive, group_folders_id, INDEX_SHEET_NAME, index_sheet_values(index_rows), "USER_ENTERED")
 
-    report_unmatched_folders(drive, group_folders_id, teams)
+    report_unmatched_folders(drive, group_folders_id, teams, group_folder_name)
 
     log.info("")
-    log.info("%s folder:  %s", GROUP_FOLDERS_NAME, folder_url(group_folders_id))
+    log.info("%s folder:  %s", group_folder_name, folder_url(group_folders_id))
     log.info("%s: %s", INDEX_SHEET_NAME, spreadsheet_url(index_id))
     return SyncResult(group_folders_id, index_id, index_rows)

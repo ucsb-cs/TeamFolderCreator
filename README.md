@@ -11,13 +11,58 @@ updates what is out of date.
 Optionally, it can also bookmark each team's folder in that team's Slack
 channel (see [Slack bookmarks](#slack-bookmarks-optional)).
 
+A second script, `distribute_file.py`, copies a template Google Doc (e.g. a
+team agreement) into every team's folder once `create_team_folders.py` has
+created them (see [Distributing a file to every team](#distributing-a-file-to-every-team-optional)).
+
+
+## Running it (after setup)
+
+If you have already set up the tokens, etc., here's how you run the script.  Note that it will not work if you haven't set up the tokens yet to authenticate and authorize the actions in Canvas and Google Drive (see below), and optionally in Slack.
+
+```bash
+source venv/bin/activate
+python create_team_folders.py \
+    --course "CMPSC 156" --term "Fall 2026" \
+    --group-set "Project Groups" \
+    --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders"
+```
+
+Preview first if you like:
+
+```bash
+python create_team_folders.py --course "CMPSC 156" --term "Fall 2026" \
+    --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" --dry-run
+```
+
+The same with Canvas ids instead of names:
+
+```bash
+python create_team_folders.py --course-id 32781 --group-set-id 28352 \
+    --folder-name "20264-CS156-F26" --group-folder-name "CS156-F26-GroupFolders"
+```
+
+Once the team folders exist, `distribute_file.py` can copy a template Google
+Doc into every team's folder (see [Distributing a file to every team](#distributing-a-file-to-every-team-optional)
+for setup: it needs a `Templates` folder with exactly one Google Doc in it).
+It needs the same tokens set up as above:
+
+```bash
+python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
+    --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" \
+    --file-name "Team Agreement, {team}"
+```
+
 ## What it creates
 
 Given the name of an existing Google Drive folder (say
-`CS156-F26-Team-Folders`), the script produces:
+`20264-CS156-F26`), the script produces:
 
 ```
-CS156-F26-Team-Folders/                 <- the parent folder; you create this
+20264-CS156-F26/                 <- the parent folder; you create this
 └── GroupFolders/                       <- created by the script; readable by anyone with the link
     ├── GroupFolders Index              <- spreadsheet: Group | Folder (link)
     ├── s26-01/                         <- one folder per Canvas group, named after it
@@ -57,6 +102,11 @@ Rules that keep re-runs safe:
   the owner.
 * Use `--dry-run` to see exactly what a run would do without changing
   anything.
+* **Don't rename the `GroupFolders` folder.** The script finds it by name
+  (`GroupFolders` by default), so renaming it makes the next run think it's
+  missing and create a brand new one, leaving your old folders as an
+  orphaned duplicate. If you must rename it, pass the same new name via
+  `--group-folder-name` on every future run (see the options table below).
 
 ## Setup
 
@@ -166,31 +216,9 @@ lists the candidates with their ids so you can refine the phrase, add
 3. The number after `courses/` is the **course id** (`32781`); the number
    after `#tab-` is the **group set id** (`28352`).
 
-## Running
 
-```bash
-source venv/bin/activate
-python create_team_folders.py \
-    --course "CMPSC 156" --term "Fall 2026" \
-    --group-set "Project Groups" \
-    --folder-name "CS156-F26-Team-Folders"
-```
 
-Preview first if you like:
-
-```bash
-python create_team_folders.py --course "CMPSC 156" --term "Fall 2026" \
-    --group-set "Project Groups" --folder-name "CS156-F26-Team-Folders" --dry-run
-```
-
-The same with Canvas ids instead of names:
-
-```bash
-python create_team_folders.py --course-id 32781 --group-set-id 28352 \
-    --folder-name "CS156-F26-Team-Folders"
-```
-
-Before the first run, create the parent folder (`CS156-F26-Team-Folders`
+Before the first run, create the parent folder (`20264-CS156-F26`
 above) anywhere in your Drive. The script looks it up by name; if there is
 no folder with that name, or more than one, it stops with a message saying
 so. Everything the script creates goes inside `GroupFolders` under that
@@ -210,6 +238,7 @@ All options (`python create_team_folders.py --help`):
 | `--group-set`          | one of these two is required    | Name of the group set, e.g. `"Project Groups"`                          |
 | `--group-set-id`       |                                 | Canvas group set (group category) id                                    |
 | `--folder-name`        | required                        | Existing Google Drive folder that `GroupFolders` goes under             |
+| `--group-folder-name`  | `GroupFolders`                  | Name of the folder (under `--folder-name`) that holds the team folders. Change this only if you renamed `GroupFolders` after a previous run — use the *same* new name every time, or you will get a second, duplicate set of folders |
 | `--canvas-url`         | `https://ucsb.instructure.com`  | Your Canvas instance                                                    |
 | `--email-domain`       | `ucsb.edu`                      | Appended to each Canvas login id to get the student's Google account    |
 | `--canvas-token-file`  | `CANVAS_API_TOKEN`              | File holding the Canvas token (env var `CANVAS_API_TOKEN` overrides it) |
@@ -220,6 +249,45 @@ All options (`python create_team_folders.py --help`):
 | `--dry-run`            | off                             | Report what would change; change nothing                                |
 | `-v`, `--verbose`      | off                             | Debug output                                                            |
 
+## Distributing a file to every team (optional)
+
+Once `create_team_folders.py` has created the team folders, `distribute_file.py`
+can copy a template Google Doc (e.g. a team agreement) into every team's
+folder:
+
+```bash
+python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
+    --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" \
+    --file-name "Team Agreement, {team}"
+```
+
+It takes the same `--course`/`--course-id`, `--term`, `--group-set`/
+`--group-set-id` and `--folder-name` options as `create_team_folders.py`
+(see above), plus:
+
+* `--file-name` (required): the name to give the copy in each team's folder.
+  `{team}` is replaced by the team's name, e.g. `"Team Agreement, {team}"`
+  becomes `"Team Agreement, s26-01"`.
+* `--group-folder-name` (default `GroupFolders`): must match whatever
+  `--group-folder-name` you used (if any) with `create_team_folders.py`, so
+  it looks inside the right folder.
+
+Before running it:
+
+1. Run `create_team_folders.py` so that `GroupFolders` and each team's folder
+   already exist.
+2. Inside `GroupFolders`, create a folder named `Templates` and put the
+   Google Doc to distribute in it. There must be exactly one Google Doc in
+   `Templates`.
+
+For each team, the script looks for a file with the target name already in
+that team's folder; if one is there, it is left alone (never overwritten,
+never duplicated). Otherwise it copies the template doc in. Teams with no
+folder yet (i.e. `create_team_folders.py` hasn't been run for them) are
+reported as warnings and skipped. `--dry-run` and `-v`/`--verbose` work the
+same way as for `create_team_folders.py`.
+
 ## Slack bookmarks (optional)
 
 If each team has a Slack channel named `team-<group name>` (for a Canvas
@@ -229,7 +297,8 @@ folder:
 
 ```bash
 python create_team_folders.py --course "CMPSC 156" --term "Fall 2026" \
-    --group-set "Project Groups" --folder-name "CS156-F26-Team-Folders" \
+    --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" \
     --update-slack-bookmarks
 ```
 
@@ -295,6 +364,10 @@ must be a member of each team channel.
   its folder, its member permissions, and its Members sheet; finally the
   index sheet. Spreadsheets are only rewritten when their contents differ
   from what Canvas says.
+* `file_distribution.py` is used by `distribute_file.py`. It finds the
+  single Google Doc in `GroupFolders/Templates`, then for each team copies
+  it into that team's (already existing) folder under the requested name,
+  skipping teams that already have a file with that name.
 
 Group folders are sorted naturally in the index (`Group 2` before
 `Group 10`).
@@ -336,6 +409,19 @@ Group folders are sorted naturally in the index (`Group 2` before
 * **Folders for old groups are listed as unmatched**: expected after groups
   are deleted or renamed in Canvas. The script leaves them alone; trash them
   yourself if you want.
+* **A second `GroupFolders`-like folder appeared after renaming it**: you
+  renamed `GroupFolders` without passing `--group-folder-name`; the script
+  didn't find the renamed folder and created a new `GroupFolders`. Trash the
+  new (empty, or nearly so) one, then always pass
+  `--group-folder-name "<your renamed name>"` on future runs of both
+  scripts.
+* **`No Google Doc found in the 'Templates' folder`** (`distribute_file.py`):
+  create a `Templates` folder inside `GroupFolders` and put the document to
+  distribute in it.
+* **`Found 2 Google Docs in the 'Templates' folder`**: trash or move the
+  extra doc so exactly one remains.
+* **`no team folder found` for a team** (`distribute_file.py`): that team has
+  no folder yet; run `create_team_folders.py` first.
 
 ## Development
 
@@ -346,8 +432,8 @@ python -m unittest discover -s tests -v
 ```
 
 The tests exercise the Canvas parsing, the permission add/remove planning,
-the idempotent sync logic (against an in-memory fake Drive) and dry-run
-mode.
+the idempotent sync logic (against an in-memory fake Drive), file
+distribution, and dry-run mode.
 
 ## History
 

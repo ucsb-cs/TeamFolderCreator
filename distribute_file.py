@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Create (or update) a Google Drive folder per Canvas group.
+"""Copy a template Google Doc from Templates/ into every Canvas group's folder.
 
 Usage:
-    python create_team_folders.py --course "CMPSC 156" --term "Spring 2026" \
-        --group-set "Project Groups" --folder-name "CS156-S26-Team-Folders"
+    python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
+        --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+        --file-name "Team Agreement, {team}"
 
-or, with Canvas ids instead of names:
-
-    python create_team_folders.py --course-id 32781 --group-set-id 28352 \
-        --folder-name "CS156-S26-Team-Folders"
+Run create_team_folders.py first: this script expects GroupFolders and each
+team's folder to already exist. It looks for a folder named Templates inside
+GroupFolders, expects exactly one Google Doc in it, and copies that doc into
+each team's folder, substituting the team name for {team} in --file-name.
 
 See README.md for setup and details.
 """
@@ -17,20 +18,18 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 
 import canvas_api
+import file_distribution
 import google_drive
-import slack_bookmarks
-import team_folders
+from create_team_folders import read_canvas_token, resolve_ids
 
 DEFAULT_CANVAS_URL = "https://ucsb.instructure.com"
 DEFAULT_EMAIL_DOMAIN = "ucsb.edu"
 DEFAULT_TOKEN_FILE = "CANVAS_API_TOKEN"
 DEFAULT_CREDENTIALS_FILE = "credentials.json"
 DEFAULT_GOOGLE_TOKEN_FILE = "token.json"
-DEFAULT_SLACK_TOKEN_FILE = "SLACK_TOKEN"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -56,12 +55,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--folder-name", required=True,
-        help="Name of an existing Google Drive folder to put GroupFolders under (must exist, exactly one)",
+        help="Name of the existing Google Drive folder containing GroupFolders (as created by create_team_folders.py)",
     )
     parser.add_argument(
-        "--group-folder-name", default=team_folders.GROUP_FOLDERS_NAME,
+        "--group-folder-name", default="GroupFolders",
         help="Name of the folder (under --folder-name) that holds the team folders; "
-             "change this if you renamed it after a previous run",
+             "must match what create_team_folders.py used (its --group-folder-name, if given)",
+    )
+    parser.add_argument(
+        "--file-name", required=True,
+        help="Name for the copied file in each team's folder; {team} is replaced by the team's name, "
+             "e.g. 'Team Agreement, {team}'",
     )
     parser.add_argument("--canvas-url", default=DEFAULT_CANVAS_URL, help="Base URL of your Canvas instance")
     parser.add_argument(
@@ -75,54 +79,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--credentials", default=DEFAULT_CREDENTIALS_FILE, help="Google OAuth client secrets file")
     parser.add_argument("--token", default=DEFAULT_GOOGLE_TOKEN_FILE, help="Where the Google login token is cached")
     parser.add_argument(
-        "--update-slack-bookmarks", action="store_true",
-        help="Also add a 'Google Drive Folder' bookmark to each team's Slack channel "
-             "(#team-<group name>); needs a Slack token (see README)",
-    )
-    parser.add_argument(
-        "--slack-token-file", default=DEFAULT_SLACK_TOKEN_FILE,
-        help="File containing the Slack token (the SLACK_TOKEN environment variable overrides it)",
-    )
-    parser.add_argument(
         "--dry-run", action="store_true",
         help="Read from Canvas and Drive and report what would change, without changing anything",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Show debug output")
     return parser.parse_args(argv)
-
-
-def read_canvas_token(path: str) -> str:
-    token = os.environ.get("CANVAS_API_TOKEN", "").strip()
-    if token:
-        return token
-    try:
-        with open(path) as f:
-            token = f.read().strip()
-    except FileNotFoundError:
-        raise SystemExit(
-            f"Canvas API token not found: set the CANVAS_API_TOKEN environment variable "
-            f"or put the token in the file '{path}'. See README: 'Set up the Canvas token'."
-        )
-    if not token:
-        raise SystemExit(f"Canvas token file '{path}' is empty.")
-    return token
-
-
-def resolve_ids(canvas: canvas_api.CanvasClient, args: argparse.Namespace, log: logging.Logger) -> tuple[str, str]:
-    """Turn --course/--term and --group-set into ids, or pass the given ids through."""
-    if args.course:
-        course = canvas_api.find_course(canvas, args.course, args.term)
-        log.info("Course: %s", canvas_api.describe_course(course))
-        course_id = str(course["id"])
-    else:
-        course_id = args.course_id
-    if args.group_set:
-        group_set = canvas_api.find_group_set(canvas, course_id, args.group_set)
-        log.info("Group set: %s (id %s)", group_set.get("name"), group_set.get("id"))
-        group_set_id = str(group_set["id"])
-    else:
-        group_set_id = args.group_set_id
-    return course_id, group_set_id
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -132,25 +93,22 @@ def main(argv: list[str] | None = None) -> int:
         format="%(message)s",
         stream=sys.stdout,
     )
-    log = logging.getLogger("create_team_folders")
+    log = logging.getLogger("distribute_file")
     if not args.folder_name.strip():
         raise SystemExit("--folder-name must not be blank.")
+    if not args.file_name.strip():
+        raise SystemExit("--file-name must not be blank.")
     if args.term and not args.course:
         raise SystemExit("--term only makes sense together with --course.")
     if args.dry_run:
         log.info("DRY RUN: nothing will be created or changed in Google Drive.")
 
     try:
-        slack_token = None
-        if args.update_slack_bookmarks:  # fail early if the token is missing
-            slack_token = slack_bookmarks.read_slack_token(args.slack_token_file)
-
         canvas = canvas_api.CanvasClient(args.canvas_url, read_canvas_token(args.canvas_token_file))
         course_id, group_set_id = resolve_ids(canvas, args, log)
         log.info("Reading groups from Canvas...")
         teams = canvas_api.fetch_teams(canvas, course_id, group_set_id, args.email_domain)
-        students = canvas_api.fetch_student_emails(canvas, course_id, args.email_domain)
-        log.info("Found %d group(s); %d student(s) in the course roster.", len(teams), len(students))
+        log.info("Found %d group(s).", len(teams))
         if not teams:
             log.warning("The group set has no groups; nothing to do.")
             return 0
@@ -158,15 +116,19 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Connecting to Google Drive...")
         creds = google_drive.load_credentials(args.credentials, args.token)
         drive = google_drive.Drive(creds, dry_run=args.dry_run)
-        result = team_folders.sync_team_folders(
-            drive, teams, students, args.folder_name.strip(), args.group_folder_name.strip()
+        result = file_distribution.distribute_file(
+            drive, teams, args.folder_name.strip(), args.file_name, args.group_folder_name.strip()
         )
 
-        if slack_token:
-            log.info("Updating Slack bookmarks...")
-            slack = slack_bookmarks.SlackClient(slack_token)
-            slack_bookmarks.update_slack_bookmarks(slack, result.team_folders, dry_run=args.dry_run)
-    except (canvas_api.CanvasError, google_drive.DriveError, slack_bookmarks.SlackError, ValueError) as e:
+        log.info("")
+        log.info("%s: %d team(s)", file_distribution.did(drive, "Copied", "would copy"), len(result.copied))
+        log.info("Already present: %d team(s)", len(result.already_present))
+        if result.missing_team_folders:
+            log.warning(
+                "No team folder (run create_team_folders.py first): %s",
+                ", ".join(result.missing_team_folders),
+            )
+    except (canvas_api.CanvasError, google_drive.DriveError, ValueError) as e:
         log.error("ERROR: %s", e)
         return 1
     return 0

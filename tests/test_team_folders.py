@@ -212,6 +212,12 @@ class SyncTests(unittest.TestCase):
             sync_team_folders(self.drive, self.teams, self.students, "Does Not Exist")
         self.assertEqual(len(self.drive.items), 1)  # nothing was created
 
+    def test_custom_group_folder_name_is_used_instead_of_default(self):
+        result = sync_team_folders(self.drive, self.teams, self.students, "Top", "Renamed-GroupFolders")
+        renamed = self.drive.find_id("Renamed-GroupFolders")
+        self.assertEqual(result.group_folders_id, renamed)
+        self.assertEqual(self.drive.find_by_name("GroupFolders", self.drive.find_id("Top"), team_folders.FOLDER_MIME), [])
+
     def test_duplicate_parent_folder_is_an_error(self):
         self.drive.items["dup"] = {"name": "Top", "parent": None, "mime": team_folders.FOLDER_MIME}
         with self.assertRaises(DriveError):

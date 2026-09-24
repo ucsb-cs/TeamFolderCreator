@@ -23,6 +23,7 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
 SPREADSHEET_MIME = "application/vnd.google-apps.spreadsheet"
+DOCUMENT_MIME = "application/vnd.google-apps.document"
 
 # googleapiclient retries HTTP 5xx, 429 and rate-limit 403s with backoff.
 RETRIES = 5
@@ -179,6 +180,18 @@ class Drive:
 
     def find_or_create_spreadsheet(self, name: str, parent_id: str) -> tuple[str, bool]:
         return self.find_or_create(name, parent_id, SPREADSHEET_MIME)
+
+    def copy_file(self, file_id: str, name: str, parent_id: str) -> str:
+        """Copy an existing file, giving the copy a new name and parent."""
+        if self.dry_run:
+            log.debug("[dry-run] not copying %s to '%s'", file_id, name)
+            return f"{DRY_RUN_PREFIX}copy:{name}"
+        copied = (
+            self.drive.files()
+            .copy(fileId=file_id, body={"name": name, "parents": [parent_id]}, fields="id")
+            .execute(num_retries=RETRIES)
+        )
+        return copied["id"]
 
     # --- permissions -----------------------------------------------------
 
