@@ -58,6 +58,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--folder-name", required=True,
         help="Name of an existing Google Drive folder to put GroupFolders under (must exist, exactly one)",
     )
+    parser.add_argument(
+        "--group-folder-name", default=team_folders.GROUP_FOLDERS_NAME,
+        help="Name of the folder (under --folder-name) that holds the team folders; "
+             "change this if you renamed it after a previous run",
+    )
     parser.add_argument("--canvas-url", default=DEFAULT_CANVAS_URL, help="Base URL of your Canvas instance")
     parser.add_argument(
         "--email-domain", default=DEFAULT_EMAIL_DOMAIN,
@@ -153,7 +158,9 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Connecting to Google Drive...")
         creds = google_drive.load_credentials(args.credentials, args.token)
         drive = google_drive.Drive(creds, dry_run=args.dry_run)
-        result = team_folders.sync_team_folders(drive, teams, students, args.folder_name.strip())
+        result = team_folders.sync_team_folders(
+            drive, teams, students, args.folder_name.strip(), args.group_folder_name.strip()
+        )
 
         if slack_token:
             log.info("Updating Slack bookmarks...")

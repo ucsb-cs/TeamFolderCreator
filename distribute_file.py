@@ -58,6 +58,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Name of the existing Google Drive folder containing GroupFolders (as created by create_team_folders.py)",
     )
     parser.add_argument(
+        "--group-folder-name", default="GroupFolders",
+        help="Name of the folder (under --folder-name) that holds the team folders; "
+             "must match what create_team_folders.py used (its --group-folder-name, if given)",
+    )
+    parser.add_argument(
         "--file-name", required=True,
         help="Name for the copied file in each team's folder; {team} is replaced by the team's name, "
              "e.g. 'Team Agreement, {team}'",
@@ -111,7 +116,9 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Connecting to Google Drive...")
         creds = google_drive.load_credentials(args.credentials, args.token)
         drive = google_drive.Drive(creds, dry_run=args.dry_run)
-        result = file_distribution.distribute_file(drive, teams, args.folder_name.strip(), args.file_name)
+        result = file_distribution.distribute_file(
+            drive, teams, args.folder_name.strip(), args.file_name, args.group_folder_name.strip()
+        )
 
         log.info("")
         log.info("%s: %d team(s)", file_distribution.did(drive, "Copied", "would copy"), len(result.copied))

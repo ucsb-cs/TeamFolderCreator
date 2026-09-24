@@ -46,11 +46,15 @@ def did(drive: Drive, past: str, future: str) -> str:
 
 
 def distribute_file(
-    drive: Drive, teams: list[Team], folder_name: str, file_name_pattern: str
+    drive: Drive,
+    teams: list[Team],
+    folder_name: str,
+    file_name_pattern: str,
+    group_folder_name: str = "GroupFolders",
 ) -> DistributionResult:
     """Copy the Templates/ document into each team's folder, skipping teams already done."""
     top_id = drive.find_existing_folder(folder_name)
-    group_folders_id = drive.find_existing_folder("GroupFolders", top_id)
+    group_folders_id = drive.find_existing_folder(group_folder_name, top_id)
     templates_id = drive.find_existing_folder(TEMPLATES_FOLDER_NAME, group_folders_id)
 
     template_matches = drive.list_children(templates_id, DOCUMENT_MIME)
@@ -79,7 +83,7 @@ def distribute_file(
             continue
         if len(team_folder_matches) > 1:
             raise ValueError(
-                f"Found {len(team_folder_matches)} folders named '{team.name}' inside GroupFolders; "
+                f"Found {len(team_folder_matches)} folders named '{team.name}' inside {group_folder_name}; "
                 "expected exactly one. Rename or trash the extras so exactly one remains, then re-run."
             )
         team_folder_id = team_folder_matches[0]["id"]

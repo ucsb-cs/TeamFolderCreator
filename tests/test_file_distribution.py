@@ -115,6 +115,20 @@ class DistributeFileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             distribute_file(drive, self.teams, "Top", "Agreement, {team}")
 
+    def test_custom_group_folder_name(self):
+        drive = FakeDrive()
+        top = drive.add("Top", None, FOLDER_MIME)
+        renamed_group_folders = drive.add("CS156-F26-GroupFolders", top, FOLDER_MIME)
+        templates = drive.add("Templates", renamed_group_folders, FOLDER_MIME)
+        drive.add("Team Agreement Template", templates, DOCUMENT_MIME)
+        team_folder = drive.add("Group 2", renamed_group_folders, FOLDER_MIME)
+        result = distribute_file(
+            drive, [Team("Group 2", 2)], "Top", "Agreement, {team}",
+            group_folder_name="CS156-F26-GroupFolders",
+        )
+        self.assertEqual(result.copied, ["Group 2"])
+        self.assertTrue(drive.find_by_name("Agreement, Group 2", team_folder, DOCUMENT_MIME))
+
 
 if __name__ == "__main__":
     unittest.main()

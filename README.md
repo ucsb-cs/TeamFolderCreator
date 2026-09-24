@@ -99,6 +99,11 @@ Rules that keep re-runs safe:
   the owner.
 * Use `--dry-run` to see exactly what a run would do without changing
   anything.
+* **Don't rename the `GroupFolders` folder.** The script finds it by name
+  (`GroupFolders` by default), so renaming it makes the next run think it's
+  missing and create a brand new one, leaving your old folders as an
+  orphaned duplicate. If you must rename it, pass the same new name via
+  `--group-folder-name` on every future run (see the options table below).
 
 ## Setup
 
@@ -230,6 +235,7 @@ All options (`python create_team_folders.py --help`):
 | `--group-set`          | one of these two is required    | Name of the group set, e.g. `"Project Groups"`                          |
 | `--group-set-id`       |                                 | Canvas group set (group category) id                                    |
 | `--folder-name`        | required                        | Existing Google Drive folder that `GroupFolders` goes under             |
+| `--group-folder-name`  | `GroupFolders`                  | Name of the folder (under `--folder-name`) that holds the team folders. Change this only if you renamed `GroupFolders` after a previous run — use the *same* new name every time, or you will get a second, duplicate set of folders |
 | `--canvas-url`         | `https://ucsb.instructure.com`  | Your Canvas instance                                                    |
 | `--email-domain`       | `ucsb.edu`                      | Appended to each Canvas login id to get the student's Google account    |
 | `--canvas-token-file`  | `CANVAS_API_TOKEN`              | File holding the Canvas token (env var `CANVAS_API_TOKEN` overrides it) |
@@ -259,6 +265,9 @@ It takes the same `--course`/`--course-id`, `--term`, `--group-set`/
 * `--file-name` (required): the name to give the copy in each team's folder.
   `{team}` is replaced by the team's name, e.g. `"Team Agreement, {team}"`
   becomes `"Team Agreement, s26-01"`.
+* `--group-folder-name` (default `GroupFolders`): must match whatever
+  `--group-folder-name` you used (if any) with `create_team_folders.py`, so
+  it looks inside the right folder.
 
 Before running it:
 
@@ -395,6 +404,12 @@ Group folders are sorted naturally in the index (`Group 2` before
 * **Folders for old groups are listed as unmatched**: expected after groups
   are deleted or renamed in Canvas. The script leaves them alone; trash them
   yourself if you want.
+* **A second `GroupFolders`-like folder appeared after renaming it**: you
+  renamed `GroupFolders` without passing `--group-folder-name`; the script
+  didn't find the renamed folder and created a new `GroupFolders`. Trash the
+  new (empty, or nearly so) one, then always pass
+  `--group-folder-name "<your renamed name>"` on future runs of both
+  scripts.
 * **`No Google Doc found in the 'Templates' folder`** (`distribute_file.py`):
   create a `Templates` folder inside `GroupFolders` and put the document to
   distribute in it.
