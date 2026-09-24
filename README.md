@@ -13,7 +13,8 @@ channel (see [Slack bookmarks](#slack-bookmarks-optional)).
 
 A second script, `distribute_file.py`, copies a template Google Doc (e.g. a
 team agreement) into every team's folder once `create_team_folders.py` has
-created them (see [Distributing a file to every team](#distributing-a-file-to-every-team-optional)).
+created them, and a third, `delete_group_file.py`, removes such a file again
+(see [Distributing a file to every team](#distributing-a-file-to-every-team-optional)).
 
 
 ## Running it (after setup)
@@ -46,11 +47,21 @@ python create_team_folders.py --course-id 32781 --group-set-id 28352 \
 
 Once the team folders exist, `distribute_file.py` can copy a template Google
 Doc into every team's folder (see [Distributing a file to every team](#distributing-a-file-to-every-team-optional)
-for setup: it needs a `Templates` folder with exactly one Google Doc in it).
-It needs the same tokens set up as above:
+for setup: it needs a `Templates` folder containing a file named exactly like
+`--file-name`). It needs the same tokens set up as above:
 
 ```bash
 python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
+    --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" \
+    --file-name "Team Agreement, {team}"
+```
+
+Made a mistake? `delete_group_file.py` takes the same options and trashes
+that file from every team's folder:
+
+```bash
+python delete_group_file.py --course "CMPSC 156" --term "Fall 2026" \
     --group-set "Project Groups" --folder-name "20264-CS156-F26" \
     --group-folder-name "CS156-F26-GroupFolders" \
     --file-name "Team Agreement, {team}"
@@ -266,9 +277,11 @@ It takes the same `--course`/`--course-id`, `--term`, `--group-set`/
 `--group-set-id` and `--folder-name` options as `create_team_folders.py`
 (see above), plus:
 
-* `--file-name` (required): the name to give the copy in each team's folder.
-  `{team}` is replaced by the team's name, e.g. `"Team Agreement, {team}"`
-  becomes `"Team Agreement, s26-01"`.
+* `--file-name` (required): the name of the template in `Templates`, and
+  the name to give the copy in each team's folder. `{team}` is replaced by
+  the team's name in the copies, so `"Team Agreement, {team}"` looks for a
+  template called `Team Agreement, {team}` (literally, braces and all) and
+  creates `"Team Agreement, s26-01"`, `"Team Agreement, s26-02"`, ...
 * `--group-folder-name` (default `GroupFolders`): must match whatever
   `--group-folder-name` you used (if any) with `create_team_folders.py`, so
   it looks inside the right folder.
@@ -277,16 +290,39 @@ Before running it:
 
 1. Run `create_team_folders.py` so that `GroupFolders` and each team's folder
    already exist.
-2. Inside `GroupFolders`, create a folder named `Templates` and put the
-   Google Doc to distribute in it. There must be exactly one Google Doc in
-   `Templates`.
+2. Inside `GroupFolders`, create a folder named `Templates` and put the file
+   to distribute in it, named exactly as you will pass it to `--file-name`
+   (e.g. `Team Agreement, {team}`). `Templates` can hold any number of
+   templates; only the one whose name matches `--file-name` is used. It is
+   usually a Google Doc, but any file type works (a Sheet, a PDF, ...).
 
-For each team, the script looks for a file with the target name already in
-that team's folder; if one is there, it is left alone (never overwritten,
-never duplicated). Otherwise it copies the template doc in. Teams with no
-folder yet (i.e. `create_team_folders.py` hasn't been run for them) are
-reported as warnings and skipped. `--dry-run` and `-v`/`--verbose` work the
-same way as for `create_team_folders.py`.
+For each team, the script copies the template into that team's folder under
+the substituted name. **If a file with that name is already there, it is
+moved to the trash first** and replaced with a fresh copy, so re-running
+overwrites earlier copies (and any edits the team made to them; restore from
+Drive's Trash within 30 days if that was a mistake). Other files in the team
+folder are not touched. Teams with no folder yet (i.e.
+`create_team_folders.py` hasn't been run for them) are reported as warnings
+and skipped. `--dry-run` and `-v`/`--verbose` work the same way as for
+`create_team_folders.py`.
+
+### Removing a distributed file
+
+If you distributed a file with the wrong name or contents,
+`delete_group_file.py` cleans it up. It takes exactly the same options as
+`distribute_file.py`, and for each team moves the file named `--file-name`
+(with `{team}` substituted) from that team's folder to the trash:
+
+```bash
+python delete_group_file.py --course "CMPSC 156" --term "Fall 2026" \
+    --group-set "Project Groups" --folder-name "20264-CS156-F26" \
+    --group-folder-name "CS156-F26-GroupFolders" \
+    --file-name "Team Agreement, {team}"
+```
+
+It does not need the template to exist and never touches `Templates`. Teams
+that have no such file are reported and skipped. Use `--dry-run` first to
+see which files would go.
 
 ## Slack bookmarks (optional)
 
@@ -364,10 +400,13 @@ must be a member of each team channel.
   its folder, its member permissions, and its Members sheet; finally the
   index sheet. Spreadsheets are only rewritten when their contents differ
   from what Canvas says.
-* `file_distribution.py` is used by `distribute_file.py`. It finds the
-  single Google Doc in `GroupFolders/Templates`, then for each team copies
-  it into that team's (already existing) folder under the requested name,
-  skipping teams that already have a file with that name.
+* `file_distribution.py` is used by `distribute_file.py` and
+  `delete_group_file.py`. It finds the file in `GroupFolders/Templates`
+  whose name matches `--file-name`, then for each team trashes any existing
+  file with the substituted name in that team's (already existing) folder
+  and copies the template in. The delete variant just does the trashing
+  step. `delete_group_file.py` reuses the option parsing and Canvas/Drive
+  setup from `distribute_file.py`.
 
 Group folders are sorted naturally in the index (`Group 2` before
 `Group 10`).
@@ -415,13 +454,19 @@ Group folders are sorted naturally in the index (`Group 2` before
   new (empty, or nearly so) one, then always pass
   `--group-folder-name "<your renamed name>"` on future runs of both
   scripts.
-* **`No Google Doc found in the 'Templates' folder`** (`distribute_file.py`):
-  create a `Templates` folder inside `GroupFolders` and put the document to
-  distribute in it.
-* **`Found 2 Google Docs in the 'Templates' folder`**: trash or move the
-  extra doc so exactly one remains.
-* **`no team folder found` for a team** (`distribute_file.py`): that team has
-  no folder yet; run `create_team_folders.py` first.
+* **`No file named '...' found in the 'Templates' folder`**
+  (`distribute_file.py`): the template's name must be exactly the
+  `--file-name` value, including the literal `{team}`. The message lists the
+  files that are in `Templates`; rename the template or fix `--file-name`.
+* **`Found 2 files named '...' in the 'Templates' folder`**: trash or rename
+  one so exactly one remains.
+* **`no team folder found` for a team** (`distribute_file.py`,
+  `delete_group_file.py`): that team has no folder yet; run
+  `create_team_folders.py` first.
+* **I distributed the wrong file / wrong name**: run `delete_group_file.py`
+  with the same options to trash the copies, then fix and re-run
+  `distribute_file.py`. If only the contents were wrong, just fix the
+  template and re-run `distribute_file.py`; it replaces the existing copies.
 
 ## Development
 
