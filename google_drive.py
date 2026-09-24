@@ -121,11 +121,13 @@ class Drive:
 
     # --- files and folders ----------------------------------------------
 
-    def find_by_name(self, name: str, parent_id: str | None, mime_type: str) -> list[dict]:
-        """Non-trashed items with exactly this name (and parent, if given)."""
+    def find_by_name(self, name: str, parent_id: str | None, mime_type: str | None = None) -> list[dict]:
+        """Non-trashed items with exactly this name (and parent and type, if given)."""
         if parent_id and self.is_placeholder(parent_id):
             return []
-        query = f"name = '{self._quote(name)}' and mimeType = '{mime_type}' and trashed = false"
+        query = f"name = '{self._quote(name)}' and trashed = false"
+        if mime_type:
+            query += f" and mimeType = '{mime_type}'"
         if parent_id:
             query += f" and '{parent_id}' in parents"
         return self._list_files(query)
@@ -192,6 +194,15 @@ class Drive:
             .execute(num_retries=RETRIES)
         )
         return copied["id"]
+
+    def trash_file(self, file_id: str) -> None:
+        """Move a file to the Drive trash (recoverable for 30 days)."""
+        if self.dry_run or self.is_placeholder(file_id):
+            log.debug("[dry-run] not trashing %s", file_id)
+            return
+        self.drive.files().update(fileId=file_id, body={"trashed": True}, fields="id").execute(
+            num_retries=RETRIES
+        )
 
     # --- permissions -----------------------------------------------------
 
