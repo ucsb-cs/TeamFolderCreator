@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy a template Google Doc from Templates/ into every Canvas group's folder.
+"""Copy a template file from Templates/ into every Canvas group's folder.
 
 Usage:
     python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
@@ -7,9 +7,13 @@ Usage:
         --file-name "Team Agreement, {team}"
 
 Run create_team_folders.py first: this script expects GroupFolders and each
-team's folder to already exist. It looks for a folder named Templates inside
-GroupFolders, expects exactly one Google Doc in it, and copies that doc into
-each team's folder, substituting the team name for {team} in --file-name.
+team's folder to already exist. It looks inside GroupFolders/Templates for a
+file named exactly like --file-name (e.g. a Google Doc called
+"Team Agreement, {team}") and copies it into each team's folder, substituting
+the team name for {team}. A file already in a team's folder with that name is
+moved to the trash first, so re-running replaces the copies.
+
+To remove the copies again, run delete_group_file.py with the same options.
 
 See README.md for setup and details.
 """
@@ -19,10 +23,12 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable
 
 import canvas_api
 import file_distribution
 import google_drive
+from canvas_api import Team
 from create_team_folders import read_canvas_token, resolve_ids
 
 DEFAULT_CANVAS_URL = "https://ucsb.instructure.com"
@@ -32,9 +38,10 @@ DEFAULT_CREDENTIALS_FILE = "credentials.json"
 DEFAULT_GOOGLE_TOKEN_FILE = "token.json"
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+def build_parser(description: str, file_name_help: str) -> argparse.ArgumentParser:
+    """The options shared by distribute_file.py and delete_group_file.py."""
     parser = argparse.ArgumentParser(
-        description=__doc__.split("\n\n")[0],
+        description=description,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     course = parser.add_mutually_exclusive_group(required=True)
@@ -62,11 +69,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Name of the folder (under --folder-name) that holds the team folders; "
              "must match what create_team_folders.py used (its --group-folder-name, if given)",
     )
-    parser.add_argument(
-        "--file-name", required=True,
-        help="Name for the copied file in each team's folder; {team} is replaced by the team's name, "
-             "e.g. 'Team Agreement, {team}'",
-    )
+    parser.add_argument("--file-name", required=True, help=file_name_help)
     parser.add_argument("--canvas-url", default=DEFAULT_CANVAS_URL, help="Base URL of your Canvas instance")
     parser.add_argument(
         "--email-domain", default=DEFAULT_EMAIL_DOMAIN,
@@ -83,17 +86,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Read from Canvas and Drive and report what would change, without changing anything",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Show debug output")
+    return parser
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = build_parser(
+        __doc__.split("\n\n")[0],
+        file_name_help="Name of the template file in Templates/, and of the copy in each team's folder; "
+                       "{team} is replaced by the team's name, e.g. 'Team Agreement, {team}'",
+    )
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
+def run(
+    args: argparse.Namespace,
+    logger_name: str,
+    action: Callable[[google_drive.Drive, list[Team], logging.Logger], None],
+) -> int:
+    """Validate args, connect to Canvas and Drive, then hand off to ``action``."""
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(message)s",
         stream=sys.stdout,
     )
-    log = logging.getLogger("distribute_file")
+    log = logging.getLogger(logger_name)
     if not args.folder_name.strip():
         raise SystemExit("--folder-name must not be blank.")
     if not args.file_name.strip():
@@ -116,22 +132,34 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Connecting to Google Drive...")
         creds = google_drive.load_credentials(args.credentials, args.token)
         drive = google_drive.Drive(creds, dry_run=args.dry_run)
+        action(drive, teams, log)
+    except (canvas_api.CanvasError, google_drive.DriveError, ValueError) as e:
+        log.error("ERROR: %s", e)
+        return 1
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    def action(drive: google_drive.Drive, teams: list[Team], log: logging.Logger) -> None:
         result = file_distribution.distribute_file(
             drive, teams, args.folder_name.strip(), args.file_name, args.group_folder_name.strip()
         )
-
         log.info("")
         log.info("%s: %d team(s)", file_distribution.did(drive, "Copied", "would copy"), len(result.copied))
-        log.info("Already present: %d team(s)", len(result.already_present))
+        if result.replaced:
+            log.info(
+                "  of which %s an existing file: %d team(s)",
+                file_distribution.did(drive, "replaced", "replace"), len(result.replaced),
+            )
         if result.missing_team_folders:
             log.warning(
                 "No team folder (run create_team_folders.py first): %s",
                 ", ".join(result.missing_team_folders),
             )
-    except (canvas_api.CanvasError, google_drive.DriveError, ValueError) as e:
-        log.error("ERROR: %s", e)
-        return 1
-    return 0
+
+    return run(args, "distribute_file", action)
 
 
 if __name__ == "__main__":
