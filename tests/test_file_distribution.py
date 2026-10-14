@@ -3,7 +3,9 @@ import unittest
 from canvas_api import Team
 from google_drive import DOCUMENT_MIME, FOLDER_MIME, SPREADSHEET_MIME
 import file_distribution
-from file_distribution import delete_group_file, distribute_file, distributed_file_name
+from file_distribution import (
+    delete_group_file, distribute_file, distributed_file_name, locate_group_folders, locate_template,
+)
 
 
 class PureHelperTests(unittest.TestCase):
@@ -185,6 +187,50 @@ class DistributeFileTests(unittest.TestCase):
         )
         self.assertEqual(result.copied, ["Group 2"])
         self.assertTrue(drive.find_by_name("Agreement, Group 2", team_folder, DOCUMENT_MIME))
+
+
+class LocateTests(unittest.TestCase):
+    """The up-front checks the CLIs run before touching Canvas."""
+
+    def setUp(self):
+        self.drive = FakeDrive()
+        top = self.drive.add("Top", None, FOLDER_MIME)
+        self.group_folders = self.drive.add("GroupFolders", top, FOLDER_MIME)
+        self.templates = self.drive.add("Templates", self.group_folders, FOLDER_MIME)
+        self.template_doc = self.drive.add(PATTERN, self.templates, DOCUMENT_MIME)
+        self.drive.add("Other - {team}", self.templates, DOCUMENT_MIME)
+
+    def test_locate_template_finds_the_matching_file(self):
+        loc = locate_template(self.drive, "Top", PATTERN)
+        self.assertEqual(loc.group_folders_id, self.group_folders)
+        self.assertEqual(loc.group_folder_name, "GroupFolders")
+        self.assertEqual(loc.template_id, self.template_doc)
+
+    def test_locate_template_fails_on_missing_name_listing_the_files(self):
+        with self.assertRaises(ValueError) as ctx:
+            locate_template(self.drive, "Top", "Nope - {team}")
+        msg = str(ctx.exception)
+        self.assertIn("'Nope - {team}'", msg)
+        self.assertIn(PATTERN, msg)
+        self.assertIn("Other - {team}", msg)
+
+    def test_locate_template_fails_on_missing_folders(self):
+        with self.assertRaises(ValueError):
+            locate_template(self.drive, "Wrong Top", PATTERN)
+        with self.assertRaises(ValueError):
+            locate_template(self.drive, "Top", PATTERN, group_folder_name="Renamed")
+
+    def test_locate_group_folders_does_not_need_a_template(self):
+        del self.drive.items[self.template_doc]
+        loc = locate_group_folders(self.drive, "Top")
+        self.assertEqual(loc.group_folders_id, self.group_folders)
+
+    def test_distribute_accepts_a_precomputed_location(self):
+        team = self.drive.add("Group 2", self.group_folders, FOLDER_MIME)
+        loc = locate_template(self.drive, "Top", PATTERN)
+        result = distribute_file(self.drive, [Team("Group 2", 2)], "Top", PATTERN, location=loc)
+        self.assertEqual(result.copied, ["Group 2"])
+        self.assertEqual(self.drive.names_in(team), ["Agreement, Group 2"])
 
 
 class DeleteGroupFileTests(unittest.TestCase):

@@ -296,6 +296,10 @@ Before running it:
    templates; only the one whose name matches `--file-name` is used. It is
    usually a Google Doc, but any file type works (a Sheet, a PDF, ...).
 
+The script checks Drive first: if the parent folder, `GroupFolders` or the
+template can't be found, it stops immediately, before reading anything from
+Canvas. (The "no file named ..." message lists what *is* in `Templates`.)
+
 For each team, the script copies the template into that team's folder under
 the substituted name. **If a file with that name is already there, it is
 moved to the trash first** and replaced with a fresh copy, so re-running
