@@ -35,9 +35,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    def action(drive: google_drive.Drive, teams: list[Team], log: logging.Logger) -> None:
+    folder_name, group_folder_name = args.folder_name.strip(), args.group_folder_name.strip()
+
+    def prepare(drive: google_drive.Drive, log: logging.Logger) -> file_distribution.GroupFolders:
+        return file_distribution.locate_group_folders(drive, folder_name, group_folder_name)
+
+    def action(
+        drive: google_drive.Drive,
+        location: file_distribution.GroupFolders,
+        teams: list[Team],
+        log: logging.Logger,
+    ) -> None:
         result = file_distribution.delete_group_file(
-            drive, teams, args.folder_name.strip(), args.file_name, args.group_folder_name.strip()
+            drive, teams, folder_name, args.file_name, group_folder_name, location=location
         )
         log.info("")
         log.info("%s: %d team(s)", file_distribution.did(drive, "Trashed", "would trash"), len(result.deleted))
@@ -48,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
                 ", ".join(result.missing_team_folders),
             )
 
-    return run(args, "delete_group_file", action)
+    return run(args, "delete_group_file", prepare, action)
 
 
 if __name__ == "__main__":

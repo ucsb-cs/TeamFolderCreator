@@ -41,6 +41,19 @@ def distributed_file_name(file_name_pattern: str, team_name: str) -> str:
 
 
 @dataclass
+class GroupFolders:
+    """Where the team folders live, resolved once up front."""
+    group_folders_id: str
+    group_folder_name: str
+
+
+@dataclass
+class TemplateLocation(GroupFolders):
+    """``GroupFolders`` plus the id of the template to copy."""
+    template_id: str
+
+
+@dataclass
 class DistributionResult:
     copied: list[str] = field(default_factory=list)  # team names the file was copied for
     replaced: list[str] = field(default_factory=list)  # subset of copied: an old copy was trashed first
@@ -83,6 +96,22 @@ def find_template(drive: Drive, group_folders_id: str, file_name_pattern: str) -
     return matches[0]["id"]
 
 
+def locate_group_folders(drive: Drive, folder_name: str, group_folder_name: str = "GroupFolders") -> GroupFolders:
+    """Resolve <folder_name>/<group_folder_name>; errors if either is missing or ambiguous."""
+    top_id = drive.find_existing_folder(folder_name)
+    group_folders_id = drive.find_existing_folder(group_folder_name, top_id)
+    return GroupFolders(group_folders_id, group_folder_name)
+
+
+def locate_template(
+    drive: Drive, folder_name: str, file_name_pattern: str, group_folder_name: str = "GroupFolders"
+) -> TemplateLocation:
+    """Resolve the group folders and the template, so a bad name fails before anything else runs."""
+    where = locate_group_folders(drive, folder_name, group_folder_name)
+    template_id = find_template(drive, where.group_folders_id, file_name_pattern)
+    return TemplateLocation(where.group_folders_id, where.group_folder_name, template_id)
+
+
 def find_team_folder(drive: Drive, team: Team, group_folders_id: str, group_folder_name: str) -> str | None:
     """Id of the team's folder, or None (after a warning) if it doesn't exist yet."""
     matches = drive.find_by_name(team.name, group_folders_id, FOLDER_MIME)
@@ -103,11 +132,15 @@ def distribute_file(
     folder_name: str,
     file_name_pattern: str,
     group_folder_name: str = "GroupFolders",
+    location: TemplateLocation | None = None,
 ) -> DistributionResult:
-    """Copy Templates/<file_name_pattern> into each team's folder, replacing any existing copy."""
-    top_id = drive.find_existing_folder(folder_name)
-    group_folders_id = drive.find_existing_folder(group_folder_name, top_id)
-    template_id = find_template(drive, group_folders_id, file_name_pattern)
+    """Copy Templates/<file_name_pattern> into each team's folder, replacing any existing copy.
+
+    Pass ``location`` (from ``locate_template``) to skip re-resolving the folders and template.
+    """
+    if location is None:
+        location = locate_template(drive, folder_name, file_name_pattern, group_folder_name)
+    group_folders_id, template_id = location.group_folders_id, location.template_id
 
     result = DistributionResult()
     for team in teams:
@@ -137,10 +170,12 @@ def delete_group_file(
     folder_name: str,
     file_name_pattern: str,
     group_folder_name: str = "GroupFolders",
+    location: GroupFolders | None = None,
 ) -> DeletionResult:
     """Trash the file named by ``file_name_pattern`` (with {team} substituted) from each team's folder."""
-    top_id = drive.find_existing_folder(folder_name)
-    group_folders_id = drive.find_existing_folder(group_folder_name, top_id)
+    if location is None:
+        location = locate_group_folders(drive, folder_name, group_folder_name)
+    group_folders_id = location.group_folders_id
 
     result = DeletionResult()
     for team in teams:

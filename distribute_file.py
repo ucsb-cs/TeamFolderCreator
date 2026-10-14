@@ -9,8 +9,9 @@ Usage:
 Run create_team_folders.py first: this script expects GroupFolders and each
 team's folder to already exist. It looks inside GroupFolders/Templates for a
 file named exactly like --file-name (e.g. a Google Doc called
-"Team Agreement, {team}") and copies it into each team's folder, substituting
-the team name for {team}. A file already in a team's folder with that name is
+"Team Agreement, {team}"); if there is no such file it stops right away,
+before reading anything from Canvas. Otherwise it copies that file into each
+team's folder, substituting the team name for {team}. A file already in a team's folder with that name is
 moved to the trash first, so re-running replaces the copies.
 
 To remove the copies again, run delete_group_file.py with the same options.
@@ -24,6 +25,7 @@ import argparse
 import logging
 import sys
 from collections.abc import Callable
+from typing import Any
 
 import canvas_api
 import file_distribution
@@ -101,9 +103,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def run(
     args: argparse.Namespace,
     logger_name: str,
-    action: Callable[[google_drive.Drive, list[Team], logging.Logger], None],
+    prepare: Callable[[google_drive.Drive, logging.Logger], Any],
+    action: Callable[[google_drive.Drive, Any, list[Team], logging.Logger], None],
 ) -> int:
-    """Validate args, connect to Canvas and Drive, then hand off to ``action``."""
+    """Validate args, connect to Drive and Canvas, then hand off to ``action``.
+
+    ``prepare(drive, log)`` runs first, before anything is read from Canvas, so
+    that Drive-side problems (a misspelled folder, a template that isn't there)
+    fail fast. Whatever it returns is passed to ``action(drive, prepared, teams, log)``.
+    """
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(message)s",
@@ -120,6 +128,11 @@ def run(
         log.info("DRY RUN: nothing will be created or changed in Google Drive.")
 
     try:
+        log.info("Connecting to Google Drive...")
+        creds = google_drive.load_credentials(args.credentials, args.token)
+        drive = google_drive.Drive(creds, dry_run=args.dry_run)
+        prepared = prepare(drive, log)
+
         canvas = canvas_api.CanvasClient(args.canvas_url, read_canvas_token(args.canvas_token_file))
         course_id, group_set_id = resolve_ids(canvas, args, log)
         log.info("Reading groups from Canvas...")
@@ -129,10 +142,7 @@ def run(
             log.warning("The group set has no groups; nothing to do.")
             return 0
 
-        log.info("Connecting to Google Drive...")
-        creds = google_drive.load_credentials(args.credentials, args.token)
-        drive = google_drive.Drive(creds, dry_run=args.dry_run)
-        action(drive, teams, log)
+        action(drive, prepared, teams, log)
     except (canvas_api.CanvasError, google_drive.DriveError, ValueError) as e:
         log.error("ERROR: %s", e)
         return 1
@@ -142,9 +152,22 @@ def run(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
-    def action(drive: google_drive.Drive, teams: list[Team], log: logging.Logger) -> None:
+    folder_name, group_folder_name = args.folder_name.strip(), args.group_folder_name.strip()
+
+    def prepare(drive: google_drive.Drive, log: logging.Logger) -> file_distribution.TemplateLocation:
+        location = file_distribution.locate_template(drive, folder_name, args.file_name, group_folder_name)
+        log.info("Found template '%s' in %s/%s/%s.", args.file_name, folder_name, group_folder_name,
+                 file_distribution.TEMPLATES_FOLDER_NAME)
+        return location
+
+    def action(
+        drive: google_drive.Drive,
+        location: file_distribution.TemplateLocation,
+        teams: list[Team],
+        log: logging.Logger,
+    ) -> None:
         result = file_distribution.distribute_file(
-            drive, teams, args.folder_name.strip(), args.file_name, args.group_folder_name.strip()
+            drive, teams, folder_name, args.file_name, group_folder_name, location=location
         )
         log.info("")
         log.info("%s: %d team(s)", file_distribution.did(drive, "Copied", "would copy"), len(result.copied))
@@ -159,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
                 ", ".join(result.missing_team_folders),
             )
 
-    return run(args, "distribute_file", action)
+    return run(args, "distribute_file", prepare, action)
 
 
 if __name__ == "__main__":
