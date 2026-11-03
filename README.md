@@ -54,7 +54,7 @@ for setup: it needs a `Templates` folder containing a file named exactly like
 python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
     --group-set "Project Groups" --folder-name "20264-CS156-F26" \
     --group-folder-name "CS156-F26-GroupFolders" \
-    --file-name "Team Agreement, {team}"
+    --file-name "Team Agreements, {team}"
 ```
 
 Made a mistake? `delete_group_file.py` takes the same options and trashes
