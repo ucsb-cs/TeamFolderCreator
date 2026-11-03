@@ -116,18 +116,40 @@ def find_team_folder(drive: Drive, team: Team, group_folders_id: str, group_fold
     return matches[0]["id"]
 
 
+@dataclass
+class Template:
+    group_folders_id: str
+    template_id: str
+    is_document: bool
+
+
+def prepare_distribution(
+    drive: Drive, folder_name: str, file_name_pattern: str, group_folder_name: str = "GroupFolders"
+) -> Template:
+    """Locate the folders and the template. Needs no Canvas data, so callers can run it first to fail fast."""
+    top_id = drive.find_existing_folder(folder_name)
+    group_folders_id = drive.find_existing_folder(group_folder_name, top_id)
+    template_id = find_template(drive, group_folders_id, file_name_pattern)
+    return Template(group_folders_id, template_id, drive.get_mime_type(template_id) == DOCUMENT_MIME)
+
+
 def distribute_file(
     drive: Drive,
     teams: list[Team],
     folder_name: str,
     file_name_pattern: str,
     group_folder_name: str = "GroupFolders",
+    template: Template | None = None,
 ) -> DistributionResult:
-    """Copy Templates/<file_name_pattern> into each team's folder, replacing any existing copy."""
-    top_id = drive.find_existing_folder(folder_name)
-    group_folders_id = drive.find_existing_folder(group_folder_name, top_id)
-    template_id = find_template(drive, group_folders_id, file_name_pattern)
-    template_is_document = drive.get_mime_type(template_id) == DOCUMENT_MIME
+    """Copy Templates/<file_name_pattern> into each team's folder, replacing any existing copy.
+
+    ``template`` is the result of an earlier ``prepare_distribution`` call; it is looked up here if omitted.
+    """
+    if template is None:
+        template = prepare_distribution(drive, folder_name, file_name_pattern, group_folder_name)
+    group_folders_id = template.group_folders_id
+    template_id = template.template_id
+    template_is_document = template.is_document
 
     result = DistributionResult()
     for team in teams:

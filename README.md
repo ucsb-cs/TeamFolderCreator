@@ -300,6 +300,10 @@ Before running it:
 See [Substitutions](#substitutions-in-file-names-and-documents) below for
 the placeholders that are filled in for each team.
 
+The script checks the folder and template names first, before it reads
+anything from Canvas, so a wrong `--folder-name` or `--file-name` fails
+immediately.
+
 For each team, the script copies the template into that team's folder under
 the substituted name. **If a file with that name is already there, it is
 moved to the trash first** and replaced with a fresh copy, so re-running

@@ -130,6 +130,14 @@ class DistributeFileTests(unittest.TestCase):
         distribute_file(self.drive, self.teams, "Top", "Retro {team}")
         self.assertFalse(getattr(self.drive, "replaced_in", {}))
 
+    def test_prepare_distribution_fails_on_bad_name_before_any_teams_are_needed(self):
+        from file_distribution import prepare_distribution
+        with self.assertRaises(ValueError):
+            prepare_distribution(self.drive, "Top", "Nope - {team}")
+        template = prepare_distribution(self.drive, "Top", PATTERN)
+        self.assertEqual(template.template_id, self.template_doc)
+        self.assertTrue(template.is_document)
+
     def test_template_is_chosen_by_name_among_several(self):
         self.drive.add("Future Questions - {team}", self.templates, DOCUMENT_MIME)
         self.drive.add("P03 - {team}", self.templates, DOCUMENT_MIME)

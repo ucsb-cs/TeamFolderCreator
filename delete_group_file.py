@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    def action(drive: google_drive.Drive, teams: list[Team], log: logging.Logger) -> None:
+    def action(drive: google_drive.Drive, teams: list[Team], log: logging.Logger, _prepared: object) -> None:
         result = file_distribution.delete_group_file(
             drive, teams, args.folder_name.strip(), args.file_name, args.group_folder_name.strip()
         )
