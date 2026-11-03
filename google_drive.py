@@ -18,7 +18,7 @@ from googleapiclient.errors import HttpError
 
 log = logging.getLogger(__name__)
 
-# One scope covers both the Drive API and the Sheets API.
+# One scope covers the Drive, Sheets and Docs APIs.
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -86,6 +86,7 @@ class Drive:
     def __init__(self, creds: Credentials, dry_run: bool = False):
         self.drive = build("drive", "v3", credentials=creds, cache_discovery=False)
         self.sheets = build("sheets", "v4", credentials=creds, cache_discovery=False)
+        self.docs = build("docs", "v1", credentials=creds, cache_discovery=False)
         self.dry_run = dry_run
 
     # --- helpers ---------------------------------------------------------
@@ -194,6 +195,22 @@ class Drive:
             .execute(num_retries=RETRIES)
         )
         return copied["id"]
+
+    def get_mime_type(self, file_id: str) -> str:
+        return self.drive.files().get(fileId=file_id, fields="mimeType").execute(num_retries=RETRIES)["mimeType"]
+
+    def replace_text_in_document(self, document_id: str, replacements: dict[str, str]) -> None:
+        """Replace every occurrence of each key with its value in a Google Doc (body, headers, footers)."""
+        if self.dry_run or self.is_placeholder(document_id) or not replacements:
+            log.debug("[dry-run] not replacing text in %s", document_id)
+            return
+        requests = [
+            {"replaceAllText": {"containsText": {"text": old, "matchCase": True}, "replaceText": new}}
+            for old, new in replacements.items()
+        ]
+        self.docs.documents().batchUpdate(documentId=document_id, body={"requests": requests}).execute(
+            num_retries=RETRIES
+        )
 
     def trash_file(self, file_id: str) -> None:
         """Move a file to the Drive trash (recoverable for 30 days)."""

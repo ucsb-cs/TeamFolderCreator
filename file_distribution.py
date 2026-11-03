@@ -17,6 +17,11 @@ then copied into each team's folder with ``{team}`` replaced by the team's
 name. Any file already in the team's folder with that name is trashed first,
 so re-running replaces the copies rather than duplicating them.
 
+In a Google Doc template, ``${TEAM}`` is replaced by the team's name,
+``${MEMBERS}`` by the member names (one per line), and ``${MEMBER1}`` ..
+``${MEMBER6}`` by the individual names in the same order; a slot beyond the
+team's size becomes "(There is no MEMBER6 for this team)".
+
 ``delete_group_file`` is the undo: it trashes the file with that name from
 every team's folder (for cleaning up after a copy with the wrong name or
 contents). It does not need the template to exist.
@@ -28,12 +33,26 @@ import logging
 from dataclasses import dataclass, field
 
 from canvas_api import Team
-from google_drive import FOLDER_MIME, Drive, folder_url
+from google_drive import DOCUMENT_MIME, FOLDER_MIME, Drive, folder_url
 
 log = logging.getLogger(__name__)
 
 TEMPLATES_FOLDER_NAME = "Templates"
 TEAM_PLACEHOLDER = "{team}"
+MAX_MEMBER_SLOTS = 6
+
+
+def document_replacements(team: Team) -> dict[str, str]:
+    """Text substitutions for a team's copy of a template Google Doc.
+
+    ``${TEAM}`` -> team name; ``${MEMBERS}`` -> member names, one per line;
+    ``${MEMBER1}``..``${MEMBER6}`` -> that member, or a note if the slot is empty.
+    """
+    names = [m.name for m in team.members]
+    replacements = {"${TEAM}": team.name, "${MEMBERS}": "\n".join(names)}
+    for i in range(1, MAX_MEMBER_SLOTS + 1):
+        replacements[f"${{MEMBER{i}}}"] = names[i - 1] if i <= len(names) else f"(There is no MEMBER{i} for this team)"
+    return replacements
 
 
 def distributed_file_name(file_name_pattern: str, team_name: str) -> str:
@@ -108,6 +127,7 @@ def distribute_file(
     top_id = drive.find_existing_folder(folder_name)
     group_folders_id = drive.find_existing_folder(group_folder_name, top_id)
     template_id = find_template(drive, group_folders_id, file_name_pattern)
+    template_is_document = drive.get_mime_type(template_id) == DOCUMENT_MIME
 
     result = DistributionResult()
     for team in teams:
@@ -124,7 +144,9 @@ def distribute_file(
         if existing:
             result.replaced.append(team.name)
 
-        drive.copy_file(template_id, dest_name, team_folder_id)
+        copy_id = drive.copy_file(template_id, dest_name, team_folder_id)
+        if template_is_document:
+            drive.replace_text_in_document(copy_id, document_replacements(team))
         log.info("  %s: %s '%s' into %s", team.name, did(drive, "copied", "copy"), dest_name, folder_url(team_folder_id))
         result.copied.append(team.name)
 

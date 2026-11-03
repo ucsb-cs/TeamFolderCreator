@@ -160,8 +160,9 @@ client from Google Cloud once; after that, a browser login on first run.
 1. Open the [Google Cloud Console](https://console.cloud.google.com/) and
    create a project (or reuse one). Instructions:
    [creating a project](https://ucsb-cs156.github.io/topics/oauth/google_create_developer_project.html).
-2. **Enable two APIs**: in **APIs & Services > Library**, search for and
-   enable **Google Drive API** and **Google Sheets API**.
+2. **Enable three APIs**: in **APIs & Services > Library**, search for and
+   enable **Google Drive API**, **Google Sheets API** and **Google Docs API**
+   (the Docs API is needed to fill in placeholders in distributed documents).
 3. **Configure the OAuth consent screen** (**APIs & Services > OAuth consent
    screen**). Instructions:
    [OAuth consent screen](https://ucsb-cs156.github.io/topics/oauth/google_oauth_consent_screen.html).
@@ -295,6 +296,15 @@ Before running it:
    (e.g. `Team Agreement, {team}`). `Templates` can hold any number of
    templates; only the one whose name matches `--file-name` is used. It is
    usually a Google Doc, but any file type works (a Sheet, a PDF, ...).
+
+If the template is a Google Doc, these placeholders are filled in in each
+team's copy (body, headers and footers):
+
+* `${TEAM}`: the team's name.
+* `${MEMBERS}`: the team's members, one name per line.
+* `${MEMBER1}` ... `${MEMBER6}`: the individual member names, in the same
+  order as in `${MEMBERS}`. A slot with no member (e.g. `${MEMBER6}` on a
+  five-person team) becomes `(There is no MEMBER6 for this team)`.
 
 For each team, the script copies the template into that team's folder under
 the substituted name. **If a file with that name is already there, it is
