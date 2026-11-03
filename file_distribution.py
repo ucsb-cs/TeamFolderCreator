@@ -17,9 +17,9 @@ then copied into each team's folder with ``{team}`` replaced by the team's
 name. Any file already in the team's folder with that name is trashed first,
 so re-running replaces the copies rather than duplicating them.
 
-In a Google Doc template, ``${TEAM}`` is replaced by the team's name,
-``${MEMBERS}`` by the member names (one per line), and ``${MEMBER1}`` ..
-``${MEMBER6}`` by the individual names in the same order; a slot beyond the
+In a Google Doc template, ``{team}`` is replaced by the team's name,
+``{members}`` by the member names (one per line), and ``{member1}`` ..
+``{member6}`` by the individual names in the same order; a slot beyond the
 team's size becomes "(There is no MEMBER6 for this team)".
 
 ``delete_group_file`` is the undo: it trashes the file with that name from
@@ -45,13 +45,13 @@ MAX_MEMBER_SLOTS = 6
 def document_replacements(team: Team) -> dict[str, str]:
     """Text substitutions for a team's copy of a template Google Doc.
 
-    ``${TEAM}`` -> team name; ``${MEMBERS}`` -> member names, one per line;
-    ``${MEMBER1}``..``${MEMBER6}`` -> that member, or a note if the slot is empty.
+    ``{team}`` -> team name; ``{members}`` -> member names, one per line;
+    ``{member1}``..``{member6}`` -> that member, or a note if the slot is empty.
     """
     names = [m.name for m in team.members]
-    replacements = {"${TEAM}": team.name, "${MEMBERS}": "\n".join(names)}
+    replacements = {"{team}": team.name, "{members}": "\n".join(names)}
     for i in range(1, MAX_MEMBER_SLOTS + 1):
-        replacements[f"${{MEMBER{i}}}"] = names[i - 1] if i <= len(names) else f"(There is no MEMBER{i} for this team)"
+        replacements[f"{{member{i}}}"] = names[i - 1] if i <= len(names) else f"(There is no MEMBER{i} for this team)"
     return replacements
 
 

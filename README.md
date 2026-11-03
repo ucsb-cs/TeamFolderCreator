@@ -314,8 +314,10 @@ and skipped. `--dry-run` and `-v`/`--verbose` work the same way as for
 
 Each team gets its own copy of the template, personalized in two places.
 
-**1. The file name (`--file-name`).** Any template type. Write `{team}`
-(single braces, no dollar sign) and it is replaced by the team's name.
+Placeholders are plain lowercase words in single braces, e.g. `{team}`.
+
+**1. The file name (`--file-name`).** Any template type. Write `{team}` and
+it is replaced by the team's name.
 `delete_group_file.py` uses the same rule to find the file to remove.
 
 | Placeholder | Replaced with |
@@ -323,28 +325,28 @@ Each team gets its own copy of the template, personalized in two places.
 | `{team}` | the team's name (the Canvas group name) |
 
 **2. The text inside the document.** Google Docs templates only (a Sheet,
-PDF or other file type is copied as is). Write the placeholders with a dollar
-sign and braces; they are replaced everywhere in the Doc: body, tables,
-headers and footers. Matching is case-sensitive, so `${team}` is left alone.
+PDF or other file type is copied as is). The same placeholder syntax works inside the
+text; they are replaced everywhere in the Doc: body, tables,
+headers and footers. Matching is case-sensitive, so `{Team}` is left alone.
 
 | Placeholder | Replaced with |
 |---|---|
-| `${TEAM}` | the team's name |
-| `${MEMBERS}` | all team members, one name per line, sorted alphabetically by name |
-| `${MEMBER1}` ... `${MEMBER6}` | that one member's name, in the same order as `${MEMBERS}` |
+| `{team}` | the team's name |
+| `{members}` | all team members, one name per line, sorted alphabetically by name |
+| `{member1}` ... `{member6}` | that one member's name, in the same order as `{members}` |
 
 Teams can have fewer than six members:
 
-* `${MEMBERS}` lists only the members that exist: no blank lines or
+* `{members}` lists only the members that exist: no blank lines or
   placeholder text for the missing ones.
 * A numbered slot with no member is replaced with
-  `(There is no MEMBERn for this team)`. On a four-person team, `${MEMBER5}`
-  becomes `(There is no MEMBER5 for this team)` and so does `${MEMBER6}`
+  `(There is no MEMBERn for this team)`. On a four-person team, `{member5}`
+  becomes `(There is no MEMBER5 for this team)` and so does `{member6}`
   (with its own number).
-* A team with more than six members still gets all of them in `${MEMBERS}`;
-  only `${MEMBER1}`..`${MEMBER6}` stop at six.
+* A team with more than six members still gets all of them in `{members}`;
+  only `{member1}`..`{member6}` stop at six.
 
-For example, a template line `Team ${TEAM}: ${MEMBER1} and ${MEMBER2}` becomes
+For example, a template line `Team {team}: {member1} and {member2}` becomes
 `Team s26-01: Ann Lee and Bo Chen` in team s26-01's copy.
 
 Things to know:

@@ -18,17 +18,17 @@ class DocumentReplacementTests(unittest.TestCase):
     def test_full_team(self):
         team = Team("T", 1, [Member(f"Name{i}", f"e{i}@x") for i in range(1, 7)])
         r = document_replacements(team)
-        self.assertEqual(r["${TEAM}"], "T")
-        self.assertEqual(r["${MEMBERS}"], "\n".join(f"Name{i}" for i in range(1, 7)))
-        self.assertEqual(r["${MEMBER6}"], "Name6")
+        self.assertEqual(r["{team}"], "T")
+        self.assertEqual(r["{members}"], "\n".join(f"Name{i}" for i in range(1, 7)))
+        self.assertEqual(r["{member6}"], "Name6")
 
     def test_small_team_has_no_placeholders_in_list(self):
         team = Team("T", 1, [Member("A", "a@x"), Member("B", "b@x"), Member("C", "c@x"), Member("D", "d@x")])
         r = document_replacements(team)
-        self.assertEqual(r["${MEMBERS}"], "A\nB\nC\nD")
-        self.assertEqual(r["${MEMBER4}"], "D")
-        self.assertEqual(r["${MEMBER5}"], "(There is no MEMBER5 for this team)")
-        self.assertEqual(r["${MEMBER6}"], "(There is no MEMBER6 for this team)")
+        self.assertEqual(r["{members}"], "A\nB\nC\nD")
+        self.assertEqual(r["{member4}"], "D")
+        self.assertEqual(r["{member5}"], "(There is no MEMBER5 for this team)")
+        self.assertEqual(r["{member6}"], "(There is no MEMBER6 for this team)")
 
 
 class FakeDrive:
@@ -122,8 +122,8 @@ class DistributeFileTests(unittest.TestCase):
         self.teams = [Team("Group 2", 2, [Member("Ann", "a@x")]), Team("Group 10", 10)]
         distribute_file(self.drive, self.teams, "Top", PATTERN)
         doc_a = self.drive.find_id("Agreement, Group 2", self.team_a)
-        self.assertEqual(self.drive.replaced_in[doc_a]["${MEMBER1}"], "Ann")
-        self.assertEqual(self.drive.replaced_in[doc_a]["${TEAM}"], "Group 2")
+        self.assertEqual(self.drive.replaced_in[doc_a]["{member1}"], "Ann")
+        self.assertEqual(self.drive.replaced_in[doc_a]["{team}"], "Group 2")
 
     def test_non_document_copies_are_not_edited(self):
         self.drive.add("Retro {team}", self.templates, SPREADSHEET_MIME)
