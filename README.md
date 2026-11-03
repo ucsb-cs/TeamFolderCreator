@@ -297,14 +297,8 @@ Before running it:
    templates; only the one whose name matches `--file-name` is used. It is
    usually a Google Doc, but any file type works (a Sheet, a PDF, ...).
 
-If the template is a Google Doc, these placeholders are filled in in each
-team's copy (body, headers and footers):
-
-* `${TEAM}`: the team's name.
-* `${MEMBERS}`: the team's members, one name per line.
-* `${MEMBER1}` ... `${MEMBER6}`: the individual member names, in the same
-  order as in `${MEMBERS}`. A slot with no member (e.g. `${MEMBER6}` on a
-  five-person team) becomes `(There is no MEMBER6 for this team)`.
+See [Substitutions](#substitutions-in-file-names-and-documents) below for
+the placeholders that are filled in for each team.
 
 For each team, the script copies the template into that team's folder under
 the substituted name. **If a file with that name is already there, it is
@@ -315,6 +309,58 @@ folder are not touched. Teams with no folder yet (i.e.
 `create_team_folders.py` hasn't been run for them) are reported as warnings
 and skipped. `--dry-run` and `-v`/`--verbose` work the same way as for
 `create_team_folders.py`.
+
+### Substitutions in file names and documents
+
+Each team gets its own copy of the template, personalized in two places.
+
+**1. The file name (`--file-name`).** Any template type. Write `{team}`
+(single braces, no dollar sign) and it is replaced by the team's name.
+`delete_group_file.py` uses the same rule to find the file to remove.
+
+| Placeholder | Replaced with |
+|---|---|
+| `{team}` | the team's name (the Canvas group name) |
+
+**2. The text inside the document.** Google Docs templates only (a Sheet,
+PDF or other file type is copied as is). Write the placeholders with a dollar
+sign and braces; they are replaced everywhere in the Doc: body, tables,
+headers and footers. Matching is case-sensitive, so `${team}` is left alone.
+
+| Placeholder | Replaced with |
+|---|---|
+| `${TEAM}` | the team's name |
+| `${MEMBERS}` | all team members, one name per line, sorted alphabetically by name |
+| `${MEMBER1}` ... `${MEMBER6}` | that one member's name, in the same order as `${MEMBERS}` |
+
+Teams can have fewer than six members:
+
+* `${MEMBERS}` lists only the members that exist: no blank lines or
+  placeholder text for the missing ones.
+* A numbered slot with no member is replaced with
+  `(There is no MEMBERn for this team)`. On a four-person team, `${MEMBER5}`
+  becomes `(There is no MEMBER5 for this team)` and so does `${MEMBER6}`
+  (with its own number).
+* A team with more than six members still gets all of them in `${MEMBERS}`;
+  only `${MEMBER1}`..`${MEMBER6}` stop at six.
+
+For example, a template line `Team ${TEAM}: ${MEMBER1} and ${MEMBER2}` becomes
+`Team s26-01: Ann Lee and Bo Chen` in team s26-01's copy.
+
+Things to know:
+
+* Names come from Canvas, the same ones listed in each team's `Members`
+  sheet.
+* The substitution is applied to the new copy only; the template in
+  `Templates` is never changed.
+* Because re-running replaces existing copies with fresh ones, the
+  substitution is redone each time, using the *current* Canvas groups. That
+  is how you refresh the documents after the groups change (but see the
+  warning above about losing the team's edits).
+* This needs the **Google Docs API** enabled in your Google Cloud project
+  (see [Set up Google credentials](#3-set-up-google-credentials)). No extra
+  OAuth scope is needed.
+* With `--dry-run`, nothing is copied or edited.
 
 ### Removing a distributed file
 
