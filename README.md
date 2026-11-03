@@ -300,9 +300,10 @@ Before running it:
 See [Substitutions](#substitutions-in-file-names-and-documents) below for
 the placeholders that are filled in for each team.
 
-The script checks the folder and template names first, before it reads
-anything from Canvas, so a wrong `--folder-name` or `--file-name` fails
-immediately.
+The script fails fast on mistakes, checking in this order: (1) the Canvas
+token and the Google login both work, (2) the folders and the template named
+by `--folder-name`, `--group-folder-name` and `--file-name` exist in Drive,
+(3) only then the course, group set and members are read from Canvas.
 
 For each team, the script copies the template into that team's folder under
 the substituted name. **If a file with that name is already there, it is

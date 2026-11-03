@@ -107,8 +107,9 @@ def run(
 ) -> int:
     """Validate args, connect to Drive and Canvas, then hand off to ``action``.
 
-    ``prepare`` (optional) runs right after connecting to Drive and before anything is read from
-    Canvas, so a wrong folder or file name fails fast. Its result is passed to ``action``.
+    Order, so that mistakes fail fast: (1) check the Canvas token and the Google login, (2) run
+    ``prepare`` (optional; checks the folder/file names in Drive), (3) read the groups from Canvas.
+    The result of ``prepare`` is passed to ``action``.
     """
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -126,12 +127,19 @@ def run(
         log.info("DRY RUN: nothing will be created or changed in Google Drive.")
 
     try:
-        log.info("Connecting to Google Drive...")
+        # 1. Tokens: confirm both logins work before looking at anything in particular.
+        log.info("Checking the Canvas token...")
+        canvas = canvas_api.CanvasClient(args.canvas_url, read_canvas_token(args.canvas_token_file))
+        log.info("  Canvas: logged in as %s", canvas.check_token())
+        log.info("Checking the Google Drive login...")
         creds = google_drive.load_credentials(args.credentials, args.token)
         drive = google_drive.Drive(creds, dry_run=args.dry_run)
+        log.info("  Google Drive: logged in as %s", drive.check_access())
+
+        # 2. Drive: the folders and template must exist (fails fast on a wrong name).
         prepared = prepare(drive, log) if prepare else None
 
-        canvas = canvas_api.CanvasClient(args.canvas_url, read_canvas_token(args.canvas_token_file))
+        # 3. Canvas: the course, group set and members.
         course_id, group_set_id = resolve_ids(canvas, args, log)
         log.info("Reading groups from Canvas...")
         teams = canvas_api.fetch_teams(canvas, course_id, group_set_id, args.email_domain)

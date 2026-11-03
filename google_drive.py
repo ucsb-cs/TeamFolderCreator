@@ -89,6 +89,14 @@ class Drive:
         self.docs = build("docs", "v1", credentials=creds, cache_discovery=False)
         self.dry_run = dry_run
 
+    def check_access(self) -> str:
+        """Make one cheap authenticated call; raises DriveError if the login is unusable. Returns the user's email."""
+        try:
+            about = self.drive.about().get(fields="user(emailAddress)").execute(num_retries=RETRIES)
+        except HttpError as e:
+            raise DriveError(f"Google Drive rejected the login: {http_error_reason(e)}") from e
+        return about.get("user", {}).get("emailAddress", "(unknown)")
+
     # --- helpers ---------------------------------------------------------
 
     @staticmethod

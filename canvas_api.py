@@ -92,6 +92,10 @@ class CanvasClient:
 
     # --- endpoints -------------------------------------------------------
 
+    def check_token(self) -> str:
+        """Make one cheap authenticated call; raises CanvasError if the token is bad. Returns the user's name."""
+        return self.get("users/self").get("name", "(unknown)")
+
     def get_courses(self) -> list[dict]:
         """Every course the token's owner is enrolled in, with term info."""
         return self.get_all("courses", {"include[]": "term"})
