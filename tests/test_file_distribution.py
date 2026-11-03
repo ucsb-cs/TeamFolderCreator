@@ -125,6 +125,16 @@ class DistributeFileTests(unittest.TestCase):
         self.assertEqual(self.drive.replaced_in[doc_a]["{member1}"], "Ann")
         self.assertEqual(self.drive.replaced_in[doc_a]["{team}"], "Group 2")
 
+    def test_each_substitution_is_logged_at_debug_level(self):
+        teams = [Team("Group 2", 2, [Member("Ann", "a@x")])]
+        with self.assertLogs(file_distribution.log, level="DEBUG") as captured:
+            distribute_file(self.drive, teams, "Top", PATTERN)
+        text = "\n".join(captured.output)
+        self.assertIn("{team} -> 'Group 2'", text)
+        self.assertIn("{member1} -> 'Ann'", text)
+        self.assertIn("{member2} -> '(There is no MEMBER2 for this team)'", text)
+        self.assertIn("{members} -> 'Ann'", text)
+
     def test_non_document_copies_are_not_edited(self):
         self.drive.add("Retro {team}", self.templates, SPREADSHEET_MIME)
         distribute_file(self.drive, self.teams, "Top", "Retro {team}")

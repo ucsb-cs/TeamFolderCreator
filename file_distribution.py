@@ -159,6 +159,7 @@ def distribute_file(
             continue
 
         dest_name = distributed_file_name(file_name_pattern, team.name)
+        log.debug("  %s: file name: %s -> %r", team.name, TEAM_PLACEHOLDER, team.name)
         existing = find_files_named(drive, dest_name, team_folder_id)
         for old in existing:
             drive.trash_file(old["id"])
@@ -168,7 +169,11 @@ def distribute_file(
 
         copy_id = drive.copy_file(template_id, dest_name, team_folder_id)
         if template_is_document:
-            drive.replace_text_in_document(copy_id, document_replacements(team))
+            replacements = document_replacements(team)
+            for placeholder, value in replacements.items():
+                log.debug("  %s: %s in document: %s -> %r", team.name, did(drive, "substituted", "would substitute"),
+                          placeholder, value)
+            drive.replace_text_in_document(copy_id, replacements)
         log.info("  %s: %s '%s' into %s", team.name, did(drive, "copied", "copy"), dest_name, folder_url(team_folder_id))
         result.copied.append(team.name)
 
@@ -194,6 +199,7 @@ def delete_group_file(
             continue
 
         name = distributed_file_name(file_name_pattern, team.name)
+        log.debug("  %s: file name: %s -> %r", team.name, TEAM_PLACEHOLDER, team.name)
         existing = find_files_named(drive, name, team_folder_id)
         if not existing:
             log.info("  %s: no file named '%s'", team.name, name)

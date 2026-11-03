@@ -368,6 +368,9 @@ Things to know:
   (see [Set up Google credentials](#3-set-up-google-credentials)). No extra
   OAuth scope is needed.
 * With `--dry-run`, nothing is copied or edited.
+* With `-v`/`--verbose`, one line is logged for every substitution made
+  (e.g. `s26-01: substituted in document: {member1} -> 'Ann Lee'`), plus the
+  `{team}` substitution in the file name.
 
 ### Removing a distributed file
 
