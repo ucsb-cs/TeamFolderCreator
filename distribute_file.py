@@ -160,9 +160,12 @@ def main(argv: list[str] | None = None) -> int:
 
     def prepare(drive: google_drive.Drive, log: logging.Logger) -> file_distribution.Template:
         log.info("Checking the template...")
-        return file_distribution.prepare_distribution(
+        template = file_distribution.prepare_distribution(
             drive, args.folder_name.strip(), args.file_name, args.group_folder_name.strip()
         )
+        log.info("Found template '%s' in %s/%s/%s.", args.file_name, args.folder_name.strip(),
+                 args.group_folder_name.strip(), file_distribution.TEMPLATES_FOLDER_NAME)
+        return template
 
     def action(drive: google_drive.Drive, teams: list[Team], log: logging.Logger, template: Any) -> None:
         result = file_distribution.distribute_file(

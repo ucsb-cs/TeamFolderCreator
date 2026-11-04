@@ -123,12 +123,17 @@ class Template:
     is_document: bool
 
 
+def locate_group_folders(drive: Drive, folder_name: str, group_folder_name: str = "GroupFolders") -> str:
+    """Id of the folder holding the team folders. Needs no Canvas data, so callers can run it first to fail fast."""
+    top_id = drive.find_existing_folder(folder_name)
+    return drive.find_existing_folder(group_folder_name, top_id)
+
+
 def prepare_distribution(
     drive: Drive, folder_name: str, file_name_pattern: str, group_folder_name: str = "GroupFolders"
 ) -> Template:
     """Locate the folders and the template. Needs no Canvas data, so callers can run it first to fail fast."""
-    top_id = drive.find_existing_folder(folder_name)
-    group_folders_id = drive.find_existing_folder(group_folder_name, top_id)
+    group_folders_id = locate_group_folders(drive, folder_name, group_folder_name)
     template_id = find_template(drive, group_folders_id, file_name_pattern)
     return Template(group_folders_id, template_id, drive.get_mime_type(template_id) == DOCUMENT_MIME)
 
@@ -186,10 +191,14 @@ def delete_group_file(
     folder_name: str,
     file_name_pattern: str,
     group_folder_name: str = "GroupFolders",
+    group_folders_id: str | None = None,
 ) -> DeletionResult:
-    """Trash the file named by ``file_name_pattern`` (with {team} substituted) from each team's folder."""
-    top_id = drive.find_existing_folder(folder_name)
-    group_folders_id = drive.find_existing_folder(group_folder_name, top_id)
+    """Trash the file named by ``file_name_pattern`` (with {team} substituted) from each team's folder.
+
+    ``group_folders_id`` is the result of an earlier ``locate_group_folders`` call; it is looked up if omitted.
+    """
+    if group_folders_id is None:
+        group_folders_id = locate_group_folders(drive, folder_name, group_folder_name)
 
     result = DeletionResult()
     for team in teams:

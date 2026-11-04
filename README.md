@@ -54,7 +54,7 @@ for setup: it needs a `Templates` folder containing a file named exactly like
 python distribute_file.py --course "CMPSC 156" --term "Fall 2026" \
     --group-set "Project Groups" --folder-name "20264-CS156-F26" \
     --group-folder-name "CS156-F26-GroupFolders" \
-    --file-name "Team Agreements, {team}"
+    --file-name "Team Agreement, {team}"
 ```
 
 Made a mistake? `delete_group_file.py` takes the same options and trashes
@@ -304,6 +304,8 @@ The script fails fast on mistakes, checking in this order: (1) the Canvas
 token and the Google login both work, (2) the folders and the template named
 by `--folder-name`, `--group-folder-name` and `--file-name` exist in Drive,
 (3) only then the course, group set and members are read from Canvas.
+`delete_group_file.py` does the same, except that it has no template to
+look for: step 2 just checks that the folders exist.
 
 For each team, the script copies the template into that team's folder under
 the substituted name. **If a file with that name is already there, it is

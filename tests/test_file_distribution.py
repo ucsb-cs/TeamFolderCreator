@@ -3,7 +3,7 @@ import unittest
 from canvas_api import Member, Team
 from google_drive import DOCUMENT_MIME, FOLDER_MIME, SPREADSHEET_MIME
 import file_distribution
-from file_distribution import delete_group_file, distribute_file, distributed_file_name, document_replacements
+from file_distribution import delete_group_file, distribute_file, distributed_file_name, document_replacements, locate_group_folders
 
 
 class PureHelperTests(unittest.TestCase):
@@ -239,6 +239,30 @@ class DistributeFileTests(unittest.TestCase):
         )
         self.assertEqual(result.copied, ["Group 2"])
         self.assertTrue(drive.find_by_name("Agreement, Group 2", team_folder, DOCUMENT_MIME))
+
+
+class LocateGroupFoldersTests(unittest.TestCase):
+    def setUp(self):
+        self.drive = FakeDrive()
+        top = self.drive.add("Top", None, FOLDER_MIME)
+        self.group_folders = self.drive.add("GroupFolders", top, FOLDER_MIME)
+        self.team = self.drive.add("Group 2", self.group_folders, FOLDER_MIME)
+
+    def test_finds_group_folders_without_needing_a_template(self):
+        self.assertEqual(locate_group_folders(self.drive, "Top"), self.group_folders)
+
+    def test_missing_folders_are_errors(self):
+        with self.assertRaises(ValueError):
+            locate_group_folders(self.drive, "Wrong Top")
+        with self.assertRaises(ValueError):
+            locate_group_folders(self.drive, "Top", "Renamed")
+
+    def test_delete_accepts_a_precomputed_location(self):
+        self.drive.add("Agreement, Group 2", self.team, DOCUMENT_MIME)
+        result = delete_group_file(
+            self.drive, [Team("Group 2", 2)], "Top", PATTERN, group_folders_id=self.group_folders
+        )
+        self.assertEqual(result.deleted, ["Group 2"])
 
 
 class DeleteGroupFileTests(unittest.TestCase):

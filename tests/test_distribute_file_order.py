@@ -46,3 +46,27 @@ class OrderOfChecksTests(unittest.TestCase):
         code, calls = self.run_main(prepare_error="No file named 'X'")
         self.assertEqual(code, 1)
         self.assertNotIn("canvas course", calls)
+
+
+class DeleteOrderTests(unittest.TestCase):
+    def test_bad_folder_stops_delete_before_canvas_groups(self):
+        import delete_group_file
+        calls = []
+        canvas = mock.Mock()
+        drive = mock.Mock()
+        patches = [
+            mock.patch.object(distribute_file.canvas_api, "CanvasClient", return_value=canvas),
+            mock.patch.object(distribute_file, "read_canvas_token", return_value="t"),
+            mock.patch.object(distribute_file.google_drive, "load_credentials", return_value=object()),
+            mock.patch.object(distribute_file.google_drive, "Drive", return_value=drive),
+            mock.patch.object(
+                delete_group_file.file_distribution, "locate_group_folders", side_effect=ValueError("no folder")
+            ),
+            mock.patch.object(distribute_file, "resolve_ids", side_effect=lambda *a, **k: calls.append("course")),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        argv = ["--course-id", "1", "--group-set-id", "2", "--folder-name", "F", "--file-name", "X {team}"]
+        self.assertEqual(delete_group_file.main(argv), 1)
+        self.assertEqual(calls, [])
