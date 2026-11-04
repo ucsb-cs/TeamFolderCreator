@@ -24,6 +24,7 @@ import argparse
 import logging
 import sys
 from collections.abc import Callable
+from typing import Any
 
 import canvas_api
 import file_distribution
@@ -101,9 +102,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def run(
     args: argparse.Namespace,
     logger_name: str,
-    action: Callable[[google_drive.Drive, list[Team], logging.Logger], None],
+    action: Callable[[google_drive.Drive, list[Team], logging.Logger, Any], None],
+    prepare: Callable[[google_drive.Drive, logging.Logger], Any] | None = None,
 ) -> int:
-    """Validate args, connect to Canvas and Drive, then hand off to ``action``."""
+    """Validate args, connect to Drive and Canvas, then hand off to ``action``.
+
+    Order, so that mistakes fail fast: (1) check the Canvas token and the Google login, (2) run
+    ``prepare`` (optional; checks the folder/file names in Drive), (3) read the groups from Canvas.
+    The result of ``prepare`` is passed to ``action``.
+    """
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(message)s",
@@ -120,7 +127,19 @@ def run(
         log.info("DRY RUN: nothing will be created or changed in Google Drive.")
 
     try:
+        # 1. Tokens: confirm both logins work before looking at anything in particular.
+        log.info("Checking the Canvas token...")
         canvas = canvas_api.CanvasClient(args.canvas_url, read_canvas_token(args.canvas_token_file))
+        log.info("  Canvas: logged in as %s", canvas.check_token())
+        log.info("Checking the Google Drive login...")
+        creds = google_drive.load_credentials(args.credentials, args.token)
+        drive = google_drive.Drive(creds, dry_run=args.dry_run)
+        log.info("  Google Drive: logged in as %s", drive.check_access())
+
+        # 2. Drive: the folders and template must exist (fails fast on a wrong name).
+        prepared = prepare(drive, log) if prepare else None
+
+        # 3. Canvas: the course, group set and members.
         course_id, group_set_id = resolve_ids(canvas, args, log)
         log.info("Reading groups from Canvas...")
         teams = canvas_api.fetch_teams(canvas, course_id, group_set_id, args.email_domain)
@@ -129,10 +148,7 @@ def run(
             log.warning("The group set has no groups; nothing to do.")
             return 0
 
-        log.info("Connecting to Google Drive...")
-        creds = google_drive.load_credentials(args.credentials, args.token)
-        drive = google_drive.Drive(creds, dry_run=args.dry_run)
-        action(drive, teams, log)
+        action(drive, teams, log, prepared)
     except (canvas_api.CanvasError, google_drive.DriveError, ValueError) as e:
         log.error("ERROR: %s", e)
         return 1
@@ -142,9 +158,15 @@ def run(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
-    def action(drive: google_drive.Drive, teams: list[Team], log: logging.Logger) -> None:
+    def prepare(drive: google_drive.Drive, log: logging.Logger) -> file_distribution.Template:
+        log.info("Checking the template...")
+        return file_distribution.prepare_distribution(
+            drive, args.folder_name.strip(), args.file_name, args.group_folder_name.strip()
+        )
+
+    def action(drive: google_drive.Drive, teams: list[Team], log: logging.Logger, template: Any) -> None:
         result = file_distribution.distribute_file(
-            drive, teams, args.folder_name.strip(), args.file_name, args.group_folder_name.strip()
+            drive, teams, args.folder_name.strip(), args.file_name, args.group_folder_name.strip(), template
         )
         log.info("")
         log.info("%s: %d team(s)", file_distribution.did(drive, "Copied", "would copy"), len(result.copied))
@@ -159,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
                 ", ".join(result.missing_team_folders),
             )
 
-    return run(args, "distribute_file", action)
+    return run(args, "distribute_file", action, prepare)
 
 
 if __name__ == "__main__":

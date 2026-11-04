@@ -160,8 +160,9 @@ client from Google Cloud once; after that, a browser login on first run.
 1. Open the [Google Cloud Console](https://console.cloud.google.com/) and
    create a project (or reuse one). Instructions:
    [creating a project](https://ucsb-cs156.github.io/topics/oauth/google_create_developer_project.html).
-2. **Enable two APIs**: in **APIs & Services > Library**, search for and
-   enable **Google Drive API** and **Google Sheets API**.
+2. **Enable three APIs**: in **APIs & Services > Library**, search for and
+   enable **Google Drive API**, **Google Sheets API** and **Google Docs API**
+   (the Docs API is needed to fill in placeholders in distributed documents).
 3. **Configure the OAuth consent screen** (**APIs & Services > OAuth consent
    screen**). Instructions:
    [OAuth consent screen](https://ucsb-cs156.github.io/topics/oauth/google_oauth_consent_screen.html).
@@ -296,6 +297,14 @@ Before running it:
    templates; only the one whose name matches `--file-name` is used. It is
    usually a Google Doc, but any file type works (a Sheet, a PDF, ...).
 
+See [Substitutions](#substitutions-in-file-names-and-documents) below for
+the placeholders that are filled in for each team.
+
+The script fails fast on mistakes, checking in this order: (1) the Canvas
+token and the Google login both work, (2) the folders and the template named
+by `--folder-name`, `--group-folder-name` and `--file-name` exist in Drive,
+(3) only then the course, group set and members are read from Canvas.
+
 For each team, the script copies the template into that team's folder under
 the substituted name. **If a file with that name is already there, it is
 moved to the trash first** and replaced with a fresh copy, so re-running
@@ -305,6 +314,63 @@ folder are not touched. Teams with no folder yet (i.e.
 `create_team_folders.py` hasn't been run for them) are reported as warnings
 and skipped. `--dry-run` and `-v`/`--verbose` work the same way as for
 `create_team_folders.py`.
+
+### Substitutions in file names and documents
+
+Each team gets its own copy of the template, personalized in two places.
+
+Placeholders are plain lowercase words in single braces, e.g. `{team}`.
+
+**1. The file name (`--file-name`).** Any template type. Write `{team}` and
+it is replaced by the team's name.
+`delete_group_file.py` uses the same rule to find the file to remove.
+
+| Placeholder | Replaced with |
+|---|---|
+| `{team}` | the team's name (the Canvas group name) |
+
+**2. The text inside the document.** Google Docs templates only (a Sheet,
+PDF or other file type is copied as is). The same placeholder syntax works inside the
+text; they are replaced everywhere in the Doc: body, tables,
+headers and footers. Matching is case-sensitive, so `{Team}` is left alone.
+
+| Placeholder | Replaced with |
+|---|---|
+| `{team}` | the team's name |
+| `{members}` | all team members, one name per line, sorted alphabetically by name |
+| `{member1}` ... `{member6}` | that one member's name, in the same order as `{members}` |
+
+Teams can have fewer than six members:
+
+* `{members}` lists only the members that exist: no blank lines or
+  placeholder text for the missing ones.
+* A numbered slot with no member is replaced with
+  `(There is no MEMBERn for this team)`. On a four-person team, `{member5}`
+  becomes `(There is no MEMBER5 for this team)` and so does `{member6}`
+  (with its own number).
+* A team with more than six members still gets all of them in `{members}`;
+  only `{member1}`..`{member6}` stop at six.
+
+For example, a template line `Team {team}: {member1} and {member2}` becomes
+`Team s26-01: Ann Lee and Bo Chen` in team s26-01's copy.
+
+Things to know:
+
+* Names come from Canvas, the same ones listed in each team's `Members`
+  sheet.
+* The substitution is applied to the new copy only; the template in
+  `Templates` is never changed.
+* Because re-running replaces existing copies with fresh ones, the
+  substitution is redone each time, using the *current* Canvas groups. That
+  is how you refresh the documents after the groups change (but see the
+  warning above about losing the team's edits).
+* This needs the **Google Docs API** enabled in your Google Cloud project
+  (see [Set up Google credentials](#3-set-up-google-credentials)). No extra
+  OAuth scope is needed.
+* With `--dry-run`, nothing is copied or edited.
+* With `-v`/`--verbose`, one line is logged for every substitution made
+  (e.g. `s26-01: substituted in document: {member1} -> 'Ann Lee'`), plus the
+  `{team}` substitution in the file name.
 
 ### Removing a distributed file
 

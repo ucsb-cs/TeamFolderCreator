@@ -1,9 +1,9 @@
 import unittest
 
-from canvas_api import Team
+from canvas_api import Member, Team
 from google_drive import DOCUMENT_MIME, FOLDER_MIME, SPREADSHEET_MIME
 import file_distribution
-from file_distribution import delete_group_file, distribute_file, distributed_file_name
+from file_distribution import delete_group_file, distribute_file, distributed_file_name, document_replacements
 
 
 class PureHelperTests(unittest.TestCase):
@@ -12,6 +12,23 @@ class PureHelperTests(unittest.TestCase):
 
     def test_pattern_without_placeholder_is_used_verbatim(self):
         self.assertEqual(distributed_file_name("Agreement", "s26-01"), "Agreement")
+
+
+class DocumentReplacementTests(unittest.TestCase):
+    def test_full_team(self):
+        team = Team("T", 1, [Member(f"Name{i}", f"e{i}@x") for i in range(1, 7)])
+        r = document_replacements(team)
+        self.assertEqual(r["{team}"], "T")
+        self.assertEqual(r["{members}"], "\n".join(f"Name{i}" for i in range(1, 7)))
+        self.assertEqual(r["{member6}"], "Name6")
+
+    def test_small_team_has_no_placeholders_in_list(self):
+        team = Team("T", 1, [Member("A", "a@x"), Member("B", "b@x"), Member("C", "c@x"), Member("D", "d@x")])
+        r = document_replacements(team)
+        self.assertEqual(r["{members}"], "A\nB\nC\nD")
+        self.assertEqual(r["{member4}"], "D")
+        self.assertEqual(r["{member5}"], "(There is no MEMBER5 for this team)")
+        self.assertEqual(r["{member6}"], "(There is no MEMBER6 for this team)")
 
 
 class FakeDrive:
@@ -57,6 +74,13 @@ class FakeDrive:
             return f"dry-run:copy:{name}"
         return self.add(name, parent_id, self.items[file_id]["mime"])
 
+    def get_mime_type(self, file_id):
+        return self.items[file_id]["mime"]
+
+    def replace_text_in_document(self, document_id, replacements):
+        self.replaced_in = getattr(self, "replaced_in", {})
+        self.replaced_in[document_id] = replacements
+
     def trash_file(self, file_id):
         self.trashed.append(file_id)
         if not self.dry_run:
@@ -93,6 +117,36 @@ class DistributeFileTests(unittest.TestCase):
         self.assertEqual(self.drive.items[doc_a]["mime"], DOCUMENT_MIME)
         self.assertEqual(self.drive.items[doc_b]["mime"], DOCUMENT_MIME)
         self.assertEqual(self.drive.trashed, [])
+
+    def test_document_copies_get_placeholders_replaced(self):
+        self.teams = [Team("Group 2", 2, [Member("Ann", "a@x")]), Team("Group 10", 10)]
+        distribute_file(self.drive, self.teams, "Top", PATTERN)
+        doc_a = self.drive.find_id("Agreement, Group 2", self.team_a)
+        self.assertEqual(self.drive.replaced_in[doc_a]["{member1}"], "Ann")
+        self.assertEqual(self.drive.replaced_in[doc_a]["{team}"], "Group 2")
+
+    def test_each_substitution_is_logged_at_debug_level(self):
+        teams = [Team("Group 2", 2, [Member("Ann", "a@x")])]
+        with self.assertLogs(file_distribution.log, level="DEBUG") as captured:
+            distribute_file(self.drive, teams, "Top", PATTERN)
+        text = "\n".join(captured.output)
+        self.assertIn("{team} -> 'Group 2'", text)
+        self.assertIn("{member1} -> 'Ann'", text)
+        self.assertIn("{member2} -> '(There is no MEMBER2 for this team)'", text)
+        self.assertIn("{members} -> 'Ann'", text)
+
+    def test_non_document_copies_are_not_edited(self):
+        self.drive.add("Retro {team}", self.templates, SPREADSHEET_MIME)
+        distribute_file(self.drive, self.teams, "Top", "Retro {team}")
+        self.assertFalse(getattr(self.drive, "replaced_in", {}))
+
+    def test_prepare_distribution_fails_on_bad_name_before_any_teams_are_needed(self):
+        from file_distribution import prepare_distribution
+        with self.assertRaises(ValueError):
+            prepare_distribution(self.drive, "Top", "Nope - {team}")
+        template = prepare_distribution(self.drive, "Top", PATTERN)
+        self.assertEqual(template.template_id, self.template_doc)
+        self.assertTrue(template.is_document)
 
     def test_template_is_chosen_by_name_among_several(self):
         self.drive.add("Future Questions - {team}", self.templates, DOCUMENT_MIME)
